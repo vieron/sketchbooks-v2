@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { button, Leva, useControls } from 'leva';
+import { button, useControls } from 'leva';
 import { createHobbyBezier } from 'hobby-curve';
+import { SketchControls } from '../../../components/SketchControls';
 import { colorPalette } from '../../../controls/colorPalettePlugin';
+import { nativeNumber } from '../../../controls/nativeNumberPlugin';
 import { originalPlaygroundPalette, sketchPalettePresets } from '../../../data/palettes';
 import {
   getFontByValue,
@@ -501,7 +503,7 @@ function createSvgScene(width: number, height: number, settings: DrawSettings): 
     settings.fontFamily,
     settings.fontWeight,
     settings.fontStyle,
-    settings.letterSpacing,
+    0,
   ) * settings.fontScale;
 
   if (settings.textLayout === 'text') {
@@ -664,8 +666,8 @@ export default function HobbyCurvesFilledType({ textLayout = 'text' }: HobbyCurv
         options: getFontVariantOptions(selectedFontFamily.fonts),
         label: 'variant',
       },
-      fontScale: { value: 1, min: 0.1, max: 2, step: 0.01, label: 'size' },
-      letterSpacing: { value: 0, min: -80, max: 160, step: 1, label: 'spacing' },
+      fontScale: { ...nativeNumber({ current: 1, min: 0.1, max: 2, step: 0.01 }), label: 'size' },
+      letterSpacing: { ...nativeNumber({ current: 0, min: -80, max: 160, step: 1 }), label: 'spacing' },
     }),
     { collapsed: false },
     [selectedFontFamily.id],
@@ -673,20 +675,20 @@ export default function HobbyCurvesFilledType({ textLayout = 'text' }: HobbyCurv
   setTypographyRef.current = setTypography;
   const selectedFont = getFontByValue(selectedFontFamily.fonts, String(typography.fontVariant), defaultFont);
   const randomness = useControls('Randomness', {
-    seed: { value: 11, min: 0, max: 999999, step: 1 },
+    seed: nativeNumber({ current: 11, min: 0, max: 999999, step: 1 }),
   }, { collapsed: false });
   const points = useControls('Points', {
-    radius: { value: 9, min: 2, max: 52, step: 1 },
+    radius: nativeNumber({ current: 9, min: 2, max: 52, step: 1 }),
     grouping: {
       value: 'horizontal',
       options: ['horizontal', 'vertical', 'diagonal', 'flow'],
     },
-    pointsPerLine: { value: DEFAULT_LINE_LENGTH, min: 2, max: 160, step: 1, label: 'line length' },
+    pointsPerLine: { ...nativeNumber({ current: DEFAULT_LINE_LENGTH, min: 2, max: 160, step: 1 }), label: 'line length' },
   }, { collapsed: false });
   const lines = useControls('Lines', {
-    lineTension: { value: 0.85, min: 0.1, max: 1, step: 0.05, label: 'tension' },
-    lineWeight: { value: 9, min: 0.5, max: 70, step: 0.5, label: 'weight' },
-    strokeWidth: { value: 0.8, min: 0, max: 30, step: 0.2, label: 'outline' },
+    lineTension: { ...nativeNumber({ current: 0.85, min: 0.1, max: 1, step: 0.05 }), label: 'tension' },
+    lineWeight: { ...nativeNumber({ current: 9, min: 0.5, max: 70, step: 0.5 }), label: 'weight' },
+    strokeWidth: { ...nativeNumber({ current: 0.8, min: 0, max: 30, step: 0.2 }), label: 'outline' },
   }, { collapsed: false });
   const colors = useControls('Color', {
     background: '#ffffff',
@@ -773,9 +775,7 @@ export default function HobbyCurvesFilledType({ textLayout = 'text' }: HobbyCurv
           ))}
         </svg>
       </div>
-      <aside className="sketch-controls">
-        <Leva fill flat collapsed={false} oneLineLabels={false} />
-      </aside>
+      <SketchControls fill flat collapsed={false} oneLineLabels={false} />
     </section>
   );
 }

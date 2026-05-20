@@ -287,6 +287,40 @@ body:has(.sketch-workbench) {
   letter-spacing: 0 !important;
 }
 
+.native-number-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(3.4rem, 4.6rem);
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.native-number-control__range {
+  width: 100%;
+  min-width: 0;
+  accent-color: #007bff;
+  touch-action: none;
+}
+
+.native-number-control__input {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: #373c4b;
+  color: #f4f7fb;
+  font: inherit;
+  text-align: right;
+  letter-spacing: 0;
+}
+
+.native-number-control__input:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
 @media (max-width: 820px) {
   .home {
     grid-template-columns: 1fr;
@@ -325,11 +359,41 @@ body:has(.sketch-workbench) {
     height: 44vh;
     padding-top: 0.5rem;
     overflow: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
     border-top: 1px solid var(--line);
     border-left: 0;
   }
 
   .sketch-controls > div {
     position: static !important;
+  }
+}
+
+@media (pointer: coarse) {
+  #leva__root > div {
+    --leva-sizes-rowHeight: 32px;
+    --leva-sizes-scrubberWidth: 18px;
+    --leva-sizes-scrubberHeight: 28px;
+    --leva-space-rowGap: 10px;
+  }
+
+  #leva__root input,
+  #leva__root select,
+  #leva__root button {
+    touch-action: manipulation;
+  }
+
+  .native-number-control {
+    grid-template-columns: minmax(0, 1fr) minmax(4rem, 5rem);
+  }
+
+  .native-number-control__range {
+    min-height: 32px;
+  }
+
+  .native-number-control__input {
+    height: 32px;
   }
 }

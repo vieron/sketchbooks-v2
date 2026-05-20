@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { button, folder, Leva, useControls } from 'leva';
+import { button, folder, useControls } from 'leva';
+import { SketchControls } from '../../../components/SketchControls';
+import { nativeNumber } from '../../../controls/nativeNumberPlugin';
 
 type Particle = {
   x: number;
@@ -209,20 +211,20 @@ export default function FlowFieldParticles() {
   const [visibleFrameCount, setVisibleFrameCount] = useState(0);
 
   const field = useControls('Field', {
-    particleCount: { value: 2500, min: 500, max: 12000, step: 250, label: 'particles' },
-    noiseScale: { value: 0.0015, min: 0.0002, max: 0.008, step: 0.0001, label: 'scale' },
-    speed: { value: 1, min: 0.1, max: 4, step: 0.1 },
-    offscreen: { value: 300, min: 0, max: 800, step: 10 },
-    seed: { value: 502, min: 1, max: 9999, step: 1 },
+    particleCount: { ...nativeNumber({ current: 2500, min: 500, max: 12000, step: 250 }), label: 'particles' },
+    noiseScale: { ...nativeNumber({ current: 0.0015, min: 0.0002, max: 0.008, step: 0.0001 }), label: 'scale' },
+    speed: nativeNumber({ current: 1, min: 0.1, max: 4, step: 0.1 }),
+    offscreen: nativeNumber({ current: 300, min: 0, max: 800, step: 10 }),
+    seed: nativeNumber({ current: 502, min: 1, max: 9999, step: 1 }),
   }, { collapsed: false });
   const animation = useControls('Animation', {
     animate: { value: true, label: 'animate' },
-    frameLimit: { value: 240, min: 20, max: 700, step: 10, label: 'frames' },
+    frameLimit: { ...nativeNumber({ current: 240, min: 20, max: 700, step: 10 }), label: 'frames' },
   }, { collapsed: false });
   const drawing = useControls('Drawing', {
-    strokeWeight: { value: 1, min: 0.2, max: 4, step: 0.1, label: 'weight' },
-    trailAlpha: { value: 40 / 255, min: 0.01, max: 1, step: 0.001, label: 'alpha' },
-    fadeAlpha: { value: 0, min: 0, max: 0.18, step: 0.001, label: 'fade' },
+    strokeWeight: { ...nativeNumber({ current: 1, min: 0.2, max: 4, step: 0.1 }), label: 'weight' },
+    trailAlpha: { ...nativeNumber({ current: 40 / 255, min: 0.01, max: 1, step: 0.001 }), label: 'alpha' },
+    fadeAlpha: { ...nativeNumber({ current: 0, min: 0, max: 0.18, step: 0.001 }), label: 'fade' },
     Color: folder({
       background: '#ffffff',
       strokeColor: '#323232',
@@ -303,9 +305,7 @@ export default function FlowFieldParticles() {
           </g>
         </svg>
       </div>
-      <aside className="sketch-controls">
-        <Leva fill flat collapsed={false} oneLineLabels={false} />
-      </aside>
+      <SketchControls fill flat collapsed={false} oneLineLabels={false} />
     </section>
   );
 }

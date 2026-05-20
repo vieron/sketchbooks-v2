@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { button, folder, Leva, useControls } from 'leva';
+import { button, folder, useControls } from 'leva';
+import { SketchControls } from '../../../components/SketchControls';
+import { nativeNumber } from '../../../controls/nativeNumberPlugin';
 
 type CircleSettings = {
   noiseMax: number;
@@ -170,21 +172,21 @@ export default function PerlinNoiseCircleOverlap() {
   const [visiblePathCount, setVisiblePathCount] = useState(0);
 
   const field = useControls('Field', {
-    noiseMax: { value: 0.6, min: 0.05, max: 3, step: 0.01, label: 'noise' },
-    averageRadiusRatio: { value: 0.3, min: 0.05, max: 0.7, step: 0.01, label: 'radius' },
-    radiusVariationRatio: { value: 0.4, min: 0, max: 0.9, step: 0.01, label: 'variation' },
-    angleStep: { value: 5, min: 1, max: 20, step: 1, label: 'detail' },
-    seed: { value: 106, min: 1, max: 9999, step: 1 },
+    noiseMax: { ...nativeNumber({ current: 0.6, min: 0.05, max: 3, step: 0.01 }), label: 'noise' },
+    averageRadiusRatio: { ...nativeNumber({ current: 0.3, min: 0.05, max: 0.7, step: 0.01 }), label: 'radius' },
+    radiusVariationRatio: { ...nativeNumber({ current: 0.4, min: 0, max: 0.9, step: 0.01 }), label: 'variation' },
+    angleStep: { ...nativeNumber({ current: 5, min: 1, max: 20, step: 1 }), label: 'detail' },
+    seed: nativeNumber({ current: 106, min: 1, max: 9999, step: 1 }),
   }, { collapsed: false });
   const animation = useControls('Animation', {
     animate: { value: true, label: 'animate' },
-    phaseSpeed: { value: 0.009, min: 0, max: 0.05, step: 0.001, label: 'phase' },
-    zSpeed: { value: 0.003, min: 0, max: 0.03, step: 0.001, label: 'depth' },
-    frameLimit: { value: 800, min: 30, max: 2000, step: 10, label: 'frames' },
+    phaseSpeed: { ...nativeNumber({ current: 0.009, min: 0, max: 0.05, step: 0.001 }), label: 'phase' },
+    zSpeed: { ...nativeNumber({ current: 0.003, min: 0, max: 0.03, step: 0.001 }), label: 'depth' },
+    frameLimit: { ...nativeNumber({ current: 800, min: 30, max: 2000, step: 10 }), label: 'frames' },
   }, { collapsed: false });
   const drawing = useControls('Drawing', {
-    strokeWeight: { value: 2, min: 0.2, max: 12, step: 0.1, label: 'weight' },
-    strokeAlpha: { value: 0.06, min: 0.005, max: 0.6, step: 0.005, label: 'alpha' },
+    strokeWeight: { ...nativeNumber({ current: 2, min: 0.2, max: 12, step: 0.1 }), label: 'weight' },
+    strokeAlpha: { ...nativeNumber({ current: 0.06, min: 0.005, max: 0.6, step: 0.005 }), label: 'alpha' },
     Color: folder({
       background: '#ffffff',
       strokeColor: '#11110f',
@@ -267,9 +269,7 @@ export default function PerlinNoiseCircleOverlap() {
           </g>
         </svg>
       </div>
-      <aside className="sketch-controls">
-        <Leva fill flat collapsed={false} oneLineLabels={false} />
-      </aside>
+      <SketchControls fill flat collapsed={false} oneLineLabels={false} />
     </section>
   );
 }

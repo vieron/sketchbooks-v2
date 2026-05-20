@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
-import { button, folder, Leva, useControls } from 'leva';
+import { button, folder, useControls } from 'leva';
+import { SketchControls } from '../../../components/SketchControls';
 import { colorPalette } from '../../../controls/colorPalettePlugin';
+import { nativeNumber } from '../../../controls/nativeNumberPlugin';
 import { originalPlaygroundPalette, sketchPalettePresets } from '../../../data/palettes';
 import {
   getFontByValue,
@@ -73,8 +75,8 @@ export default function TypographicSlicing() {
       },
       text: 'HUMANE',
       color: '#0f0f0d',
-      size: { value: 142, min: 12, max: 300, step: 0.5 },
-      letterSpacing: { value: 0, min: -5, max: 80, step: 0.1 },
+      size: nativeNumber({ current: 142, min: 12, max: 300, step: 0.5 }),
+      letterSpacing: nativeNumber({ current: 0, min: -5, max: 80, step: 0.1 }),
     },
     { collapsed: false },
     [selectedFontFamily.id, selectedFont.value],
@@ -84,12 +86,12 @@ export default function TypographicSlicing() {
   }, { collapsed: false });
   const slicingControls = useControls('Slicing', {
     enabled: true,
-    count: { value: 150, min: 1, max: 420, step: 1 },
-    angle: { value: -18, min: -90, max: 90, step: 1 },
-    phase: { value: 0, min: -0.99, max: 0.99, step: 0.01 },
-    gap: { value: 0.5, min: 0, max: 18, step: 0.01 },
-    displaceX: { value: 0, min: -80, max: 80, step: 0.1, label: 'x' },
-    displaceY: { value: 0, min: -80, max: 80, step: 0.1, label: 'y' },
+    count: nativeNumber({ current: 150, min: 1, max: 420, step: 1 }),
+    angle: nativeNumber({ current: -18, min: -90, max: 90, step: 1 }),
+    phase: nativeNumber({ current: 0, min: -0.99, max: 0.99, step: 0.01 }),
+    gap: nativeNumber({ current: 0.5, min: 0, max: 18, step: 0.01 }),
+    displaceX: { ...nativeNumber({ current: 0, min: -80, max: 80, step: 0.1 }), label: 'x' },
+    displaceY: { ...nativeNumber({ current: 0, min: -80, max: 80, step: 0.1 }), label: 'y' },
     Color: folder({
       mode: {
         value: 'solid',
@@ -183,7 +185,7 @@ export default function TypographicSlicing() {
     return (
       <section className="sketch-workbench">
         <div className="canvas-state">Font failed to load: {error}</div>
-        <aside className="sketch-controls"><Leva fill flat /></aside>
+        <SketchControls fill flat />
       </section>
     );
   }
@@ -192,7 +194,7 @@ export default function TypographicSlicing() {
     return (
       <section className="sketch-workbench">
         <div className="canvas-state">Loading font...</div>
-        <aside className="sketch-controls"><Leva fill flat /></aside>
+        <SketchControls fill flat />
       </section>
     );
   }
@@ -261,9 +263,7 @@ export default function TypographicSlicing() {
             : renderGlyphs()}
         </svg>
       </div>
-      <aside className="sketch-controls">
-        <Leva fill flat collapsed={false} oneLineLabels={false} />
-      </aside>
+      <SketchControls fill flat collapsed={false} oneLineLabels={false} />
     </section>
   );
 }

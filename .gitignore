@@ -1,0 +1,7 @@
+node_modules
+.astro
+.pnpm-store
+.playwright-mcp
+dist
+
+.DS_Store

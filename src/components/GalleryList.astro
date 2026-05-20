@@ -1,0 +1,34 @@
+---
+import type { SketchMeta } from '../data/sketches';
+
+interface Props {
+  sketches: SketchMeta[];
+}
+
+const { sketches } = Astro.props;
+---
+
+<ol class="gallery-list" aria-label="Sketch gallery">
+  {
+    sketches.map((sketch) => (
+      <li class="gallery-list__item">
+        <a href={sketch.href} class="gallery-list__link">
+          <figure class="gallery-list__figure">
+            <img
+              src={sketch.image}
+              alt={`${sketch.title} generated preview`}
+              loading="lazy"
+              decoding="async"
+            />
+          </figure>
+          <span class="gallery-list__meta">
+            <span>{sketch.number}</span>
+            <span>{sketch.medium}</span>
+          </span>
+          <span class="gallery-list__title">{sketch.title}</span>
+          <span class="gallery-list__description">{sketch.description}</span>
+        </a>
+      </li>
+    ))
+  }
+</ol>

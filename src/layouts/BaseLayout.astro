@@ -1,0 +1,43 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = 'sketchbooks',
+  description = 'Typographic visual playgrounds and generative tools by Vieron.',
+} = Astro.props;
+
+const pageTitle = title === 'sketchbooks' ? title : `${title} / sketchbooks`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="description" content={description} />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <link
+      rel="preload"
+      href="/fonts/humane/Humane-Bold.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/mango-grotesque/MangoGrotesque-Regular.otf"
+      as="font"
+      type="font/otf"
+      crossorigin
+    />
+    <title>{pageTitle}</title>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

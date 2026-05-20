@@ -1,0 +1,12 @@
+---
+import SketchLayout from '../../../layouts/SketchLayout.astro';
+import { getSketchById } from '../../../data/sketches';
+import FlowFieldParticles from './_FlowFieldParticles';
+
+const sketch = getSketchById('flow-field-particles');
+if (!sketch) throw new Error('Missing sketch metadata');
+---
+
+<SketchLayout sketch={sketch}>
+  <FlowFieldParticles client:only="react" />
+</SketchLayout>

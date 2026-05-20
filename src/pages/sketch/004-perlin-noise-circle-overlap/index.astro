@@ -1,0 +1,12 @@
+---
+import SketchLayout from '../../../layouts/SketchLayout.astro';
+import { getSketchById } from '../../../data/sketches';
+import PerlinNoiseCircleOverlap from './_PerlinNoiseCircleOverlap';
+
+const sketch = getSketchById('perlin-noise-circle-overlap');
+if (!sketch) throw new Error('Missing sketch metadata');
+---
+
+<SketchLayout sketch={sketch}>
+  <PerlinNoiseCircleOverlap client:only="react" />
+</SketchLayout>

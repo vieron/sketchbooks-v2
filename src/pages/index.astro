@@ -1,0 +1,9 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import HomeVariant from '../components/HomeVariant.astro';
+import { sketches } from '../data/sketches';
+---
+
+<BaseLayout title="sketchbooks">
+  <HomeVariant sketches={sketches} />
+</BaseLayout>

@@ -1,0 +1,267 @@
+---
+import type { SketchMeta } from '../data/sketches';
+
+interface Props {
+  sketches: SketchMeta[];
+}
+
+const { sketches } = Astro.props;
+
+const meta = {
+  kicker: 'visual experiments / browser studies',
+  title: 'generative sketches',
+  summary:
+    'Small computational studies in typography, curves, particles, and procedural image-making.',
+  note: 'A live archive of sketches built to be opened, tuned, and reused.',
+};
+
+const figureSketches = [...sketches].reverse();
+---
+
+<main class="home-variant">
+  <nav class="home-variant__nav" aria-label="Primary">
+    <a href="/" class="home-variant__brand">sketchbooks</a>
+  </nav>
+
+  <section class="home-variant__hero" aria-labelledby="home-title">
+    <p class="home-variant__kicker">{meta.kicker}</p>
+    <h1 id="home-title">{meta.title}</h1>
+    <p class="home-variant__summary">{meta.summary}</p>
+    <p class="home-variant__note">{meta.note}</p>
+  </section>
+
+  <ol class="home-variant__list" aria-label="Sketch archive">
+    {
+      figureSketches.map((sketch) => (
+        <li class="home-variant__item">
+          <a href={sketch.href} class="home-variant__item-link">
+            <span class="home-variant__item-number">{sketch.number}</span>
+            <span class="home-variant__item-title">{sketch.title}</span>
+            <span class="home-variant__item-medium">{sketch.medium}</span>
+            <span class="home-variant__item-description">
+              {sketch.description}
+            </span>
+            <figure class="home-variant__thumb">
+              <img
+                src={sketch.image}
+                alt={`${sketch.title} generated preview`}
+                loading="lazy"
+                decoding="async"
+              />
+            </figure>
+          </a>
+        </li>
+      ))
+    }
+  </ol>
+</main>
+
+<style>
+  .home-variant {
+    --variant-paper: #151411;
+    --variant-ink: #f6f2e8;
+    --variant-muted: #a8a093;
+    --variant-line: #39352d;
+    --variant-accent: #f3b23f;
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto 1fr;
+    gap: clamp(1.35rem, 2.7vw, 2.65rem);
+    padding: clamp(1rem, 2.5vw, 2.5rem);
+    background: var(--variant-paper);
+    color: var(--variant-ink);
+  }
+
+  .home-variant__nav,
+  .home-variant__kicker,
+  .home-variant__summary,
+  .home-variant__note,
+  .home-variant__item-number,
+  .home-variant__item-medium,
+  .home-variant__item-description {
+    font-family: var(--mono);
+    font-size: 0.64rem;
+    line-height: 1.45;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .home-variant__nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--variant-line);
+    color: var(--variant-muted);
+  }
+
+  .home-variant__brand,
+  .home-variant__item-link {
+    transition:
+      color 180ms ease,
+      border-color 180ms ease,
+      background-color 180ms ease;
+  }
+
+  .home-variant__brand:hover,
+  .home-variant__item-link:hover,
+  .home-variant__item-link:focus-visible {
+    color: var(--variant-accent);
+  }
+
+  .home-variant__hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.35fr);
+    align-items: end;
+    gap: 1rem 1.5rem;
+  }
+
+  .home-variant__hero h1 {
+    max-width: 9.6ch;
+    margin: 0;
+    padding-top: 0.12em;
+    font-family: var(--display);
+    font-size: clamp(5.4rem, 12.2vw, 12.5rem);
+    font-weight: 700;
+    line-height: 0.61;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .home-variant__kicker {
+    grid-column: 1 / -1;
+  }
+
+  .home-variant__kicker,
+  .home-variant__summary,
+  .home-variant__note {
+    margin: 0;
+    color: var(--variant-muted);
+  }
+
+  .home-variant__summary {
+    justify-self: end;
+    max-width: 26rem;
+  }
+
+  .home-variant__note {
+    max-width: 25rem;
+  }
+
+  .home-variant__list {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-content: start;
+    gap: clamp(1rem, 1.55vw, 1.45rem);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .home-variant__item-link {
+    display: grid;
+    grid-template-columns: 3rem minmax(0, 1fr);
+    gap: 0.45rem 0.85rem;
+    padding: 0;
+    color: inherit;
+  }
+
+  .home-variant__item-title {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 400;
+    line-height: 1.28;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .home-variant__item-number,
+  .home-variant__item-medium,
+  .home-variant__item-description {
+    color: var(--variant-muted);
+  }
+
+  .home-variant__item-medium {
+    grid-column: 2 / 3;
+    margin-top: 0.2rem;
+  }
+
+  .home-variant__item-description {
+    grid-column: 2 / 3;
+    max-width: 19rem;
+  }
+
+  .home-variant__thumb {
+    grid-column: 1 / -1;
+    order: -1;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    margin: 0 0 0.45rem;
+    border: 1px solid var(--variant-line);
+    background: #f6f2e8;
+  }
+
+  .home-variant__thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    filter: saturate(0.88) contrast(1.05);
+    transition:
+      filter 220ms ease,
+      transform 220ms ease;
+  }
+
+  .home-variant__item-link:hover img,
+  .home-variant__item-link:focus-visible img {
+    filter: saturate(1.06) contrast(1.08);
+    transform: scale(1.025);
+  }
+
+  @media (max-width: 980px) {
+    .home-variant {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto;
+      gap: 1.5rem;
+    }
+
+    .home-variant__hero {
+      grid-template-columns: 1fr;
+    }
+
+    .home-variant__summary {
+      justify-self: start;
+    }
+
+    .home-variant__list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 620px) {
+    .home-variant {
+      padding: 1rem;
+    }
+
+    .home-variant__nav {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .home-variant__hero h1 {
+      font-size: clamp(4.9rem, 24vw, 6.4rem);
+      line-height: 0.62;
+    }
+
+    .home-variant__list {
+      grid-template-columns: 1fr;
+    }
+
+    .home-variant__item-link {
+      grid-template-columns: 2.8rem minmax(0, 1fr);
+    }
+  }
+</style>

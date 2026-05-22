@@ -5,6 +5,7 @@ import { SketchControls } from '../../../components/SketchControls';
 import { colorPalette } from '../../../controls/colorPalettePlugin';
 import { nativeNumber } from '../../../controls/nativeNumberPlugin';
 import { originalPlaygroundPalette, sketchPalettePresets } from '../../../data/palettes';
+import { downloadSvg } from '../../../utils/svgDownload';
 import {
   getFontByValue,
   getFontFamilyById,
@@ -598,16 +599,7 @@ function createSvgScene(width: number, height: number, settings: DrawSettings): 
 }
 
 function saveSvg(svgElement: SVGSVGElement | null) {
-  if (!svgElement) return;
-  const clone = svgElement.cloneNode(true) as SVGSVGElement;
-  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  const blob = new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `hobby-curves-svg-${Date.now()}.svg`;
-  link.click();
-  URL.revokeObjectURL(url);
+  downloadSvg(svgElement, `hobby-curves-svg-${Date.now()}.svg`);
 }
 
 function useStageSize() {

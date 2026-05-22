@@ -48,26 +48,37 @@ const figureSketches = [...sketches].reverse();
                 loading="lazy"
                 decoding="async"
               />
+              <span class="home-variant__cursor-square" aria-hidden="true" />
             </figure>
           </a>
         </li>
       ))
     }
   </ol>
+
+  <footer class="home-variant__footer">
+    <p>sketchbooks</p>
+    <p>
+      made by <a href="https://vieron.net" target="_blank" rel="noreferrer">vieron</a>
+    </p>
+    <p>2026</p>
+  </footer>
 </main>
 
 <style>
   .home-variant {
-    --variant-paper: #151411;
-    --variant-ink: #f6f2e8;
-    --variant-muted: #a8a093;
-    --variant-line: #39352d;
-    --variant-accent: #f3b23f;
+    --variant-paper: #ffffff;
+    --variant-ink: #151411;
+    --variant-muted: #686052;
+    --variant-line: #cfc5b3;
+    --variant-electric-blue: var(--electric-blue);
+    --variant-accent: var(--variant-electric-blue);
+    --variant-thumb: #151411;
     min-height: 100vh;
     display: grid;
     grid-template-columns: 1fr;
     grid-template-rows: auto auto 1fr;
-    gap: clamp(1.35rem, 2.7vw, 2.65rem);
+    gap: clamp(1.5rem, 3vw, 3.2rem);
     padding: clamp(1rem, 2.5vw, 2.5rem);
     background: var(--variant-paper);
     color: var(--variant-ink);
@@ -77,6 +88,7 @@ const figureSketches = [...sketches].reverse();
   .home-variant__kicker,
   .home-variant__summary,
   .home-variant__note,
+  .home-variant__footer,
   .home-variant__item-number,
   .home-variant__item-medium,
   .home-variant__item-description {
@@ -101,8 +113,7 @@ const figureSketches = [...sketches].reverse();
   .home-variant__item-link {
     transition:
       color 180ms ease,
-      border-color 180ms ease,
-      background-color 180ms ease;
+      border-color 180ms ease;
   }
 
   .home-variant__brand:hover,
@@ -152,12 +163,36 @@ const figureSketches = [...sketches].reverse();
 
   .home-variant__list {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     align-content: start;
-    gap: clamp(1rem, 1.55vw, 1.45rem);
+    gap: clamp(2.2rem, 4vw, 4rem);
     margin: 0;
     padding: 0;
     list-style: none;
+  }
+
+  .home-variant__footer {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 1rem clamp(1.5rem, 4vw, 4rem);
+    align-items: end;
+    padding-top: clamp(1rem, 2vw, 1.5rem);
+    border-top: 1px solid var(--variant-line);
+    color: var(--variant-muted);
+  }
+
+  .home-variant__footer p {
+    margin: 0;
+  }
+
+  .home-variant__footer a {
+    color: inherit;
+    transition: color 180ms ease;
+  }
+
+  .home-variant__footer a:hover,
+  .home-variant__footer a:focus-visible {
+    color: var(--variant-electric-blue);
   }
 
   .home-variant__item-link {
@@ -190,17 +225,22 @@ const figureSketches = [...sketches].reverse();
 
   .home-variant__item-description {
     grid-column: 2 / 3;
-    max-width: 19rem;
+    max-width: 26rem;
   }
 
   .home-variant__thumb {
+    --cursor-x: -4rem;
+    --cursor-y: -4rem;
     grid-column: 1 / -1;
     order: -1;
+    position: relative;
     overflow: hidden;
-    aspect-ratio: 4 / 3;
-    margin: 0 0 0.45rem;
+    aspect-ratio: 16 / 7;
+    margin: 0 0 0.65rem;
     border: 1px solid var(--variant-line);
-    background: #f6f2e8;
+    background: var(--variant-thumb);
+    cursor: none;
+    transition: border-color 180ms ease;
   }
 
   .home-variant__thumb img {
@@ -210,15 +250,32 @@ const figureSketches = [...sketches].reverse();
     object-fit: cover;
     object-position: center;
     filter: saturate(0.88) contrast(1.05);
-    transition:
-      filter 220ms ease,
-      transform 220ms ease;
   }
 
-  .home-variant__item-link:hover img,
-  .home-variant__item-link:focus-visible img {
-    filter: saturate(1.06) contrast(1.08);
-    transform: scale(1.025);
+  .home-variant__cursor-square {
+    position: absolute;
+    left: var(--cursor-x);
+    top: var(--cursor-y);
+    z-index: 2;
+    width: clamp(1.5rem, 2.9vw, 2.55rem);
+    aspect-ratio: 1;
+    background: var(--variant-electric-blue);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -50%) scale(0.86);
+    transition:
+      opacity 120ms ease,
+      transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .home-variant__thumb:hover .home-variant__cursor-square {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  .home-variant__thumb:hover,
+  .home-variant__item-link:focus-visible .home-variant__thumb {
+    border-color: var(--variant-electric-blue);
   }
 
   @media (max-width: 980px) {
@@ -237,7 +294,7 @@ const figureSketches = [...sketches].reverse();
     }
 
     .home-variant__list {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1.5rem;
     }
   }
 
@@ -263,5 +320,27 @@ const figureSketches = [...sketches].reverse();
     .home-variant__item-link {
       grid-template-columns: 2.8rem minmax(0, 1fr);
     }
+
+    .home-variant__footer {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
+
+<script>
+  const cursorThumbs =
+    document.querySelectorAll<HTMLElement>('.home-variant__thumb');
+
+  cursorThumbs.forEach((thumb) => {
+    thumb.addEventListener('pointermove', (event) => {
+      const rect = thumb.getBoundingClientRect();
+      thumb.style.setProperty('--cursor-x', `${event.clientX - rect.left}px`);
+      thumb.style.setProperty('--cursor-y', `${event.clientY - rect.top}px`);
+    });
+
+    thumb.addEventListener('pointerleave', () => {
+      thumb.style.setProperty('--cursor-x', '-4rem');
+      thumb.style.setProperty('--cursor-y', '-4rem');
+    });
+  });
+</script>

@@ -11,6 +11,7 @@ import {
   getFontVariantOptions,
   humaneFontFamily,
 } from '../../../data/fonts';
+import { downloadSvg } from '../../../utils/svgDownload';
 import { buildGlyphPath, useOpenTypeFont } from './_opentype';
 import type { Bounds } from './_types';
 import { getSlicePolygons, polygonToPath } from './_geometry';
@@ -24,19 +25,6 @@ const STAGE = { width: 30000, height: 15000 };
 const SIZE_SCALE = 100;
 const LETTER_SPACING_SCALE = 15;
 const DISPLACEMENT_SCALE = 100;
-
-function downloadSvg(svgElement: SVGSVGElement | null, fileName: string) {
-  if (!svgElement) return;
-  const clone = svgElement.cloneNode(true) as SVGSVGElement;
-  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  const blob = new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  URL.revokeObjectURL(url);
-}
 
 function cleanFilePart(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'sketch';

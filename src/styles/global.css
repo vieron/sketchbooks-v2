@@ -23,6 +23,7 @@
 }
 
 :root {
+  --electric-blue: #0047ff;
   --paper: #f8f7f3;
   --ink: #11110f;
   --muted: #6c675e;
@@ -197,7 +198,7 @@ select {
 
 .sketch-page {
   min-height: 100vh;
-  background: var(--paper);
+  background: #ffffff;
 }
 
 .sketch-page__header {
@@ -211,13 +212,17 @@ select {
   gap: 1rem;
   padding: 0.75rem 1rem;
   color: var(--muted);
-  mix-blend-mode: difference;
-  filter: invert(1);
   pointer-events: none;
 }
 
 .sketch-page__header a {
   pointer-events: auto;
+  transition: color 180ms ease;
+}
+
+.sketch-page__header a:hover,
+.sketch-page__header a:focus-visible {
+  color: var(--electric-blue);
 }
 
 .sketch-page__header p {
@@ -228,7 +233,7 @@ select {
   min-height: 100vh;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
-  background: var(--paper);
+  background: #ffffff;
 }
 
 .sketch-stage {
@@ -248,7 +253,7 @@ select {
   min-height: 100vh;
   padding: 3.25rem 0.5rem 0.5rem;
   border-left: 1px solid var(--line);
-  background: var(--panel);
+  background: #ffffff;
 }
 
 .sketch-controls > div {

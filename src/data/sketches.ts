@@ -54,6 +54,15 @@ export const sketches: SketchMeta[] = [
     image: '/images/sketches/liquid-type-distortion.svg',
     medium: 'svg / displacement',
   },
+  {
+    id: 'svg-type-extrusion',
+    number: '006',
+    title: 'SVG Type Extrusion',
+    description: 'OpenType glyph outlines flattened into bright isometric side faces.',
+    href: '/sketch/006-svg-type-extrusion',
+    image: '/images/sketches/svg-type-extrusion.svg',
+    medium: 'svg / opentype',
+  },
 ];
 
 export function getSketchById(id: string) {

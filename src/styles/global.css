@@ -277,6 +277,10 @@ select {
   display: block;
 }
 
+.extrusion-stage {
+  background: #ffffff;
+}
+
 body:has(.sketch-workbench) {
   overflow: hidden;
 }

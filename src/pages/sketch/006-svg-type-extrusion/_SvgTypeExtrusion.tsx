@@ -1,26 +1,30 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import * as opentype from 'opentype.js';
-import { Clipper, ClipType, FillRule } from 'clipper2-js';
-import { button, folder, useControls } from 'leva';
-import { SketchControls } from '../../../components/SketchControls';
-import { colorPalette } from '../../../controls/colorPalettePlugin';
-import { nativeNumber } from '../../../controls/nativeNumberPlugin';
+import { useEffect, useMemo, useRef, useState } from "react";
+import * as opentype from "opentype.js";
+import { button, folder, useControls } from "leva";
+import { SketchControls } from "../../../components/SketchControls";
+import { colorPalette } from "../../../controls/colorPalettePlugin";
+import { nativeNumber } from "../../../controls/nativeNumberPlugin";
 import {
   getFontByValue,
   getFontFamilyById,
   getFontFamilyOptions,
   getFontVariantOptions,
-  geistFonts,
-} from '../../../data/fonts';
-import { sketchPalettePresets } from '../../../data/palettes';
-import { downloadSvg } from '../../../utils/svgDownload';
-import type { Bounds, OpenTypeCommand, OpenTypeFont, OpenTypeGlyph, Point } from '../003-typographic-slicing/_types';
+} from "../../../data/fonts";
+import { sketchPalettePresets } from "../../../data/palettes";
+import { downloadSvg } from "../../../utils/svgDownload";
+import type {
+  Bounds,
+  OpenTypeCommand,
+  OpenTypeFont,
+  OpenTypeGlyph,
+  Point,
+} from "../003-typographic-slicing/_types";
 
 type OpenTypeParser = {
   parse(buffer: ArrayBuffer): unknown;
 };
 
-type TextAlignment = 'left' | 'center' | 'right' | 'poster';
+type TextAlignment = "left" | "center" | "right" | "poster";
 
 type LayoutOptions = {
   fontSize: number;
@@ -45,11 +49,18 @@ type GlyphLayout = {
 type TextLayout = {
   glyphs: GlyphLayout[];
   bounds: Bounds;
+  fontSize: number;
 };
 
 type Contour = {
   points: Point[];
   closed: boolean;
+};
+
+type Point3D = {
+  x: number;
+  y: number;
+  z: number;
 };
 
 type SideFace = {
@@ -62,10 +73,18 @@ type SideFace = {
   glyphIndex: number;
   planeRank: number;
   sortKey: number;
+  zone?: FaceZone;
+  edgeIndex?: number;
+  segmentIndex?: number;
   clipPathId?: string;
 };
 
-type FaceZone = 'outer-left' | 'inner-left' | 'inner-right' | 'outer-right' | 'outer-bottom';
+type FaceZone =
+  | "outer-left"
+  | "inner-left"
+  | "inner-right"
+  | "outer-right"
+  | "outer-bottom";
 
 type SideEdge = {
   pointIndex: number;
@@ -78,9 +97,43 @@ type SideEdge = {
   clipPathId?: string;
 };
 
+type SideEdgeRun = {
+  index: number;
+  zone: FaceZone;
+  edges: SideEdge[];
+};
+
 type GlyphClip = {
   id: string;
   d: string;
+};
+
+type RenderFace = {
+  id: string;
+  kind: "back" | "side" | "front";
+  d: string;
+  fill: string;
+  glyphIndex: number;
+  lineIndex: number;
+  sortZ: number;
+  polygons: Point[][];
+  opacity?: number;
+  zone?: FaceZone;
+  edgeIndex?: number;
+  segmentIndex?: number;
+  visibilityScore?: number;
+};
+
+type RenderFaceGroup = {
+  id: string;
+  glyphIndex: number;
+  lineIndex: number;
+  sortX: number;
+  sortZ: number;
+  rotateX: number;
+  rotateY: number;
+  rotateZ: number;
+  faces: RenderFace[];
 };
 
 type RenderedSvg = {
@@ -88,11 +141,32 @@ type RenderedSvg = {
   frontFaces: GlyphLayout[];
   backFaces: GlyphLayout[];
   glyphClips: GlyphClip[];
+  orderedFaces: RenderFace[];
+  orderedFaceGroups: RenderFaceGroup[];
   viewBox: Bounds;
 };
 
+type PlaneOptions = {
+  seed: number;
+  baseRotateX: number;
+  baseRotateY: number;
+  baseRotateZ: number;
+  randomRotateX: number;
+  randomRotateY: number;
+  randomRotateZ: number;
+  depth: number;
+  randomDepth: boolean;
+  minDepth: number;
+  maxDepth: number;
+  depthScale: number;
+  perspective: number;
+  cameraX: number;
+  cameraY: number;
+  cameraZ: number;
+};
+
 type RenderOptions = {
-  depth: Point;
+  plane: PlaneOptions;
   resolution: number;
   showFront: boolean;
   showSides: boolean;
@@ -103,28 +177,36 @@ type RenderOptions = {
   palette: string[];
 };
 
-const DEFAULT_TEXT = 'EXTRUDE\nMY\nTEXT';
-const DEFAULT_PALETTE = ['#000000', '#ff0033', '#ffb000', '#0077cc', '#00a88a', '#ff4fc3'];
+const DEFAULT_TEXT = "EXTRUDE\nMY TYPE";
+const DEFAULT_FONT_FAMILY_ID = "geist";
+const DEFAULT_FONT_VALUE = "geist-black";
+const DEFAULT_PALETTE = [
+  "#000000",
+  "#ff0033",
+  "#ffb000",
+  "#0077cc",
+  "#00a88a",
+  "#ff4fc3",
+];
 const extrusionPalettePresets = [
   {
-    id: 'extruded-poster',
-    label: 'Extruded poster',
+    id: "extruded-poster",
+    label: "Extruded poster",
     colors: DEFAULT_PALETTE,
   },
   ...sketchPalettePresets,
 ];
-const FRONT_COLOR = '#000000';
-const BACK_COLOR = '#ffb000';
+const FRONT_COLOR = "#000000";
+const BACK_COLOR = "#ffb000";
 const BACK_OPACITY = 0.32;
 const VIEWBOX_PADDING = 42;
 const MAX_EXTRUSION_DEPTH = 240;
-const STABLE_VIEWBOX_PADDING = VIEWBOX_PADDING + MAX_EXTRUSION_DEPTH;
 const MIN_BOUNDS_SIZE = 1;
-const CLIPPER_SCALE = 1000;
-const LOWER_PLANE_NORMAL_THRESHOLD = 0.999;
-const UNDERSIDE_EDGE_SLOPE = 0.001;
-const UNDERSIDE_BAND_RATIO = 0.08;
-const UNDERSIDE_MIN_EDGE_RATIO = 0.18;
+const DEFAULT_FONT_SIZE = 39;
+const DEFAULT_FLATTENING_RESOLUTION = 20;
+const DEFAULT_POSTER_OFFSET_X = -56;
+const DEFAULT_POSTER_OFFSET_Y = -16;
+const FACE_RUN_MIN_DOT = Math.cos(Math.PI / 6);
 const MAX_LETTER_ROTATION_DEGREES = 16;
 const MAX_LETTER_AXIS_TILT_DEGREES = 14;
 
@@ -148,9 +230,10 @@ function includePoint(bounds: Bounds, point: Point) {
 }
 
 function includeCommand(bounds: Bounds, command: OpenTypeCommand) {
-  if (command.type === 'Z') return;
-  if (command.type === 'Q') includePoint(bounds, { x: command.x1, y: command.y1 });
-  if (command.type === 'C') {
+  if (command.type === "Z") return;
+  if (command.type === "Q")
+    includePoint(bounds, { x: command.x1, y: command.y1 });
+  if (command.type === "C") {
     includePoint(bounds, { x: command.x1, y: command.y1 });
     includePoint(bounds, { x: command.x2, y: command.y2 });
   }
@@ -165,7 +248,12 @@ function commandBounds(commands: OpenTypeCommand[]) {
 
 function padBounds(bounds: Bounds, padding: number): Bounds {
   if (!Number.isFinite(bounds.x1)) {
-    return { x1: -padding, y1: -padding, x2: padding + MIN_BOUNDS_SIZE, y2: padding + MIN_BOUNDS_SIZE };
+    return {
+      x1: -padding,
+      y1: -padding,
+      x2: padding + MIN_BOUNDS_SIZE,
+      y2: padding + MIN_BOUNDS_SIZE,
+    };
   }
 
   return {
@@ -180,7 +268,13 @@ function boundsToViewBox(bounds: Bounds) {
   return `${round(bounds.x1)} ${round(bounds.y1)} ${round(Math.max(bounds.x2 - bounds.x1, MIN_BOUNDS_SIZE))} ${round(Math.max(bounds.y2 - bounds.y1, MIN_BOUNDS_SIZE))}`;
 }
 
-function pointFromGlyph(rawX: number, rawY: number, x: number, y: number, scale: number): Point {
+function pointFromGlyph(
+  rawX: number,
+  rawY: number,
+  x: number,
+  y: number,
+  scale: number,
+): Point {
   return { x: x + rawX * scale, y: y - rawY * scale };
 }
 
@@ -196,7 +290,13 @@ function rotatePoint(point: Point, center: Point, angle: number): Point {
   };
 }
 
-function transformPoint(point: Point, center: Point, spin: number, shearX: number, shearY: number): Point {
+function transformPoint(
+  point: Point,
+  center: Point,
+  spin: number,
+  shearX: number,
+  shearY: number,
+): Point {
   const dx = point.x - center.x;
   const dy = point.y - center.y;
   const sheared = {
@@ -207,62 +307,118 @@ function transformPoint(point: Point, center: Point, spin: number, shearX: numbe
   return rotatePoint(sheared, center, spin);
 }
 
-function transformCommand(command: OpenTypeCommand, center: Point, spin: number, shearX: number, shearY: number): OpenTypeCommand {
-  if (command.type === 'Z') return command;
+function transformCommand(
+  command: OpenTypeCommand,
+  center: Point,
+  spin: number,
+  shearX: number,
+  shearY: number,
+): OpenTypeCommand {
+  if (command.type === "Z") return command;
   const point = transformPoint(command, center, spin, shearX, shearY);
-  if (command.type === 'M' || command.type === 'L') return { ...command, ...point };
-  if (command.type === 'Q') {
-    const control = transformPoint({ x: command.x1, y: command.y1 }, center, spin, shearX, shearY);
+  if (command.type === "M" || command.type === "L")
+    return { ...command, ...point };
+  if (command.type === "Q") {
+    const control = transformPoint(
+      { x: command.x1, y: command.y1 },
+      center,
+      spin,
+      shearX,
+      shearY,
+    );
     return { ...command, ...point, x1: control.x, y1: control.y };
   }
 
-  if (command.type === 'C') {
-    const controlA = transformPoint({ x: command.x1, y: command.y1 }, center, spin, shearX, shearY);
-    const controlB = transformPoint({ x: command.x2, y: command.y2 }, center, spin, shearX, shearY);
-    return { ...command, ...point, x1: controlA.x, y1: controlA.y, x2: controlB.x, y2: controlB.y };
+  if (command.type === "C") {
+    const controlA = transformPoint(
+      { x: command.x1, y: command.y1 },
+      center,
+      spin,
+      shearX,
+      shearY,
+    );
+    const controlB = transformPoint(
+      { x: command.x2, y: command.y2 },
+      center,
+      spin,
+      shearX,
+      shearY,
+    );
+    return {
+      ...command,
+      ...point,
+      x1: controlA.x,
+      y1: controlA.y,
+      x2: controlB.x,
+      y2: controlB.y,
+    };
   }
 
   return command;
 }
 
-function transformCommands(commands: OpenTypeCommand[], spin: number, shearX: number, shearY: number) {
-  if (Math.abs(spin) < 0.0001 && Math.abs(shearX) < 0.0001 && Math.abs(shearY) < 0.0001) return commands;
+function transformCommands(
+  commands: OpenTypeCommand[],
+  spin: number,
+  shearX: number,
+  shearY: number,
+) {
+  if (
+    Math.abs(spin) < 0.0001 &&
+    Math.abs(shearX) < 0.0001 &&
+    Math.abs(shearY) < 0.0001
+  )
+    return commands;
   const bounds = commandBounds(commands);
   const center = {
     x: (bounds.x1 + bounds.x2) / 2,
     y: (bounds.y1 + bounds.y2) / 2,
   };
 
-  return commands.map((command) => transformCommand(command, center, spin, shearX, shearY));
+  return commands.map((command) =>
+    transformCommand(command, center, spin, shearX, shearY),
+  );
 }
 
 function commandsToPath(commands: OpenTypeCommand[]) {
-  return commands.map((command) => {
-    if (command.type === 'M') return `M${pointToPath(command)}`;
-    if (command.type === 'L') return `L${pointToPath(command)}`;
-    if (command.type === 'Q') return `Q${pointToPath({ x: command.x1, y: command.y1 })} ${pointToPath(command)}`;
-    if (command.type === 'C') {
-      return `C${pointToPath({ x: command.x1, y: command.y1 })} ${pointToPath({ x: command.x2, y: command.y2 })} ${pointToPath(command)}`;
-    }
-    return 'Z';
-  }).join('');
+  return commands
+    .map((command) => {
+      if (command.type === "M") return `M${pointToPath(command)}`;
+      if (command.type === "L") return `L${pointToPath(command)}`;
+      if (command.type === "Q")
+        return `Q${pointToPath({ x: command.x1, y: command.y1 })} ${pointToPath(command)}`;
+      if (command.type === "C") {
+        return `C${pointToPath({ x: command.x1, y: command.y1 })} ${pointToPath({ x: command.x2, y: command.y2 })} ${pointToPath(command)}`;
+      }
+      return "Z";
+    })
+    .join("");
 }
 
-function glyphToCommands(glyph: OpenTypeGlyph, x: number, y: number, scale: number) {
+function glyphToCommands(
+  glyph: OpenTypeGlyph,
+  x: number,
+  y: number,
+  scale: number,
+) {
   return (glyph.path?.commands ?? []).map((command): OpenTypeCommand => {
-    if (command.type === 'M' || command.type === 'L') return { type: command.type, ...pointFromGlyph(command.x, command.y, x, y, scale) };
-    if (command.type === 'Q') {
+    if (command.type === "M" || command.type === "L")
       return {
-        type: 'Q',
+        type: command.type,
+        ...pointFromGlyph(command.x, command.y, x, y, scale),
+      };
+    if (command.type === "Q") {
+      return {
+        type: "Q",
         ...pointFromGlyph(command.x, command.y, x, y, scale),
         x1: pointFromGlyph(command.x1, command.y1, x, y, scale).x,
         y1: pointFromGlyph(command.x1, command.y1, x, y, scale).y,
       };
     }
 
-    if (command.type === 'C') {
+    if (command.type === "C") {
       return {
-        type: 'C',
+        type: "C",
         ...pointFromGlyph(command.x, command.y, x, y, scale),
         x1: pointFromGlyph(command.x1, command.y1, x, y, scale).x,
         y1: pointFromGlyph(command.x1, command.y1, x, y, scale).y,
@@ -271,97 +427,160 @@ function glyphToCommands(glyph: OpenTypeGlyph, x: number, y: number, scale: numb
       };
     }
 
-    return { type: 'Z' };
+    return { type: "Z" };
   });
 }
 
-function measureLine(font: OpenTypeFont, glyphs: OpenTypeGlyph[], scale: number, letterSpacing: number) {
+function measureLine(
+  font: OpenTypeFont,
+  glyphs: OpenTypeGlyph[],
+  scale: number,
+  letterSpacing: number,
+) {
   return glyphs.reduce((width, glyph, glyphIndex) => {
     const previousGlyph = glyphs[glyphIndex - 1];
-    const kerning = previousGlyph && font.getKerningValue
-      ? font.getKerningValue(previousGlyph, glyph) * scale
-      : 0;
+    const kerning =
+      previousGlyph && font.getKerningValue
+        ? font.getKerningValue(previousGlyph, glyph) * scale
+        : 0;
     const spacing = glyphIndex < glyphs.length - 1 ? letterSpacing : 0;
 
     return width + kerning + glyph.advanceWidth * scale + spacing;
   }, 0);
 }
 
-export function layoutText(font: OpenTypeFont, text: string, options: LayoutOptions): TextLayout {
+export function layoutText(
+  font: OpenTypeFont,
+  text: string,
+  options: LayoutOptions,
+): TextLayout {
   const bounds = emptyBounds();
   const scale = options.fontSize / font.unitsPerEm;
   const baselineStep = options.fontSize * options.lineHeight;
-  const lines = text.replace(/\r\n/g, '\n').split('\n').map((line) => {
-    const glyphs = font.stringToGlyphs(line || ' ');
-    return {
-      glyphs,
-      width: measureLine(font, glyphs, scale, options.letterSpacing),
-    };
-  });
-  const maxLineWidth = Math.max(...lines.map((line) => line.width), MIN_BOUNDS_SIZE);
+  const lines = text
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => {
+      const glyphs = font.stringToGlyphs(line || " ");
+      return {
+        glyphs,
+        width: measureLine(font, glyphs, scale, options.letterSpacing),
+      };
+    });
+  const maxLineWidth = Math.max(
+    ...lines.map((line) => line.width),
+    MIN_BOUNDS_SIZE,
+  );
   const glyphs = lines.flatMap((line, lineIndex) => {
     const centeredStagger = lineIndex - (lines.length - 1) / 2;
     const alternatingNudge = lineIndex % 2 === 0 ? -0.18 : 0.18;
-    const posterX = options.alignment === 'poster'
-      ? centeredStagger * options.posterOffsetX + alternatingNudge * Math.abs(options.posterOffsetX)
-      : 0;
-    const posterY = options.alignment === 'poster' ? lineIndex * options.posterOffsetY : 0;
-    const alignX = options.alignment === 'center'
-      ? (maxLineWidth - line.width) / 2
-      : options.alignment === 'right'
-        ? maxLineWidth - line.width
+    const posterX =
+      options.alignment === "poster"
+        ? centeredStagger * options.posterOffsetX +
+          alternatingNudge * Math.abs(options.posterOffsetX)
         : 0;
+    const posterY =
+      options.alignment === "poster" ? lineIndex * options.posterOffsetY : 0;
+    const alignX =
+      options.alignment === "center"
+        ? (maxLineWidth - line.width) / 2
+        : options.alignment === "right"
+          ? maxLineWidth - line.width
+          : 0;
     let cursor = posterX + alignX;
 
-    return line.glyphs.map((glyph, glyphIndex) => {
-      const previousGlyph = line.glyphs[glyphIndex - 1];
-      if (previousGlyph && font.getKerningValue) cursor += font.getKerningValue(previousGlyph, glyph) * scale;
+    return line.glyphs
+      .map((glyph, glyphIndex) => {
+        const previousGlyph = line.glyphs[glyphIndex - 1];
+        if (previousGlyph && font.getKerningValue)
+          cursor += font.getKerningValue(previousGlyph, glyph) * scale;
 
-      const transformSeed = (lineIndex + 1) * 971 + (glyphIndex + 1) * 577 + glyph.index * 0.37;
-      const spinRatio = Math.max(0, Math.min(1, Number(options.rotationSpin)));
-      const xRatio = Math.max(0, Math.min(1, Number(options.rotationX)));
-      const yRatio = Math.max(0, Math.min(1, Number(options.rotationY)));
-      const spinAngle = (seededUnit(transformSeed) * 2 - 1)
-        * spinRatio
-        * MAX_LETTER_ROTATION_DEGREES
-        * (Math.PI / 180);
-      const shearX = Math.tan((seededUnit(transformSeed + 19) * 2 - 1) * xRatio * MAX_LETTER_AXIS_TILT_DEGREES * (Math.PI / 180));
-      const shearY = Math.tan((seededUnit(transformSeed + 43) * 2 - 1) * yRatio * MAX_LETTER_AXIS_TILT_DEGREES * (Math.PI / 180));
-      const commands = transformCommands(
-        glyphToCommands(glyph, cursor, lineIndex * baselineStep + posterY, scale),
-        spinAngle,
-        shearX,
-        shearY,
-      );
-      commands.forEach((command) => includeCommand(bounds, command));
+        const transformSeed =
+          (lineIndex + 1) * 971 + (glyphIndex + 1) * 577 + glyph.index * 0.37;
+        const spinRatio = Math.max(
+          0,
+          Math.min(1, Number(options.rotationSpin)),
+        );
+        const xRatio = Math.max(0, Math.min(1, Number(options.rotationX)));
+        const yRatio = Math.max(0, Math.min(1, Number(options.rotationY)));
+        const spinAngle =
+          (seededUnit(transformSeed) * 2 - 1) *
+          spinRatio *
+          MAX_LETTER_ROTATION_DEGREES *
+          (Math.PI / 180);
+        const shearX = Math.tan(
+          (seededUnit(transformSeed + 19) * 2 - 1) *
+            xRatio *
+            MAX_LETTER_AXIS_TILT_DEGREES *
+            (Math.PI / 180),
+        );
+        const shearY = Math.tan(
+          (seededUnit(transformSeed + 43) * 2 - 1) *
+            yRatio *
+            MAX_LETTER_AXIS_TILT_DEGREES *
+            (Math.PI / 180),
+        );
+        const commands = transformCommands(
+          glyphToCommands(
+            glyph,
+            cursor,
+            lineIndex * baselineStep + posterY,
+            scale,
+          ),
+          spinAngle,
+          shearX,
+          shearY,
+        );
+        commands.forEach((command) => includeCommand(bounds, command));
 
-      const layoutGlyph = {
-        id: `glyph-${lineIndex}-${glyphIndex}-${glyph.index}`,
-        index: glyphIndex,
-        lineIndex,
-        d: commandsToPath(commands),
-        commands,
-      };
+        const layoutGlyph = {
+          id: `glyph-${lineIndex}-${glyphIndex}-${glyph.index}`,
+          index: glyphIndex,
+          lineIndex,
+          d: commandsToPath(commands),
+          commands,
+        };
 
-      cursor += glyph.advanceWidth * scale;
-      if (glyphIndex < line.glyphs.length - 1) cursor += options.letterSpacing;
-      return layoutGlyph;
-    }).filter((glyph) => glyph.d.length > 0);
+        cursor += glyph.advanceWidth * scale;
+        if (glyphIndex < line.glyphs.length - 1)
+          cursor += options.letterSpacing;
+        return layoutGlyph;
+      })
+      .filter((glyph) => glyph.d.length > 0);
   });
 
   if (!Number.isFinite(bounds.x1)) {
     includePoint(bounds, { x: 0, y: 0 });
-    includePoint(bounds, { x: Math.max(options.fontSize, MIN_BOUNDS_SIZE), y: Math.max(options.fontSize, MIN_BOUNDS_SIZE) });
+    includePoint(bounds, {
+      x: Math.max(options.fontSize, MIN_BOUNDS_SIZE),
+      y: Math.max(options.fontSize, MIN_BOUNDS_SIZE),
+    });
   }
 
-  return { glyphs, bounds };
+  return { glyphs, bounds, fontSize: options.fontSize };
 }
 
 function lerp(left: number, right: number, t: number) {
   return left + (right - left) * t;
 }
 
-export function flattenQuadratic(start: Point, control: Point, end: Point, resolution: number) {
+function lerpPoint(left: Point, right: Point, t: number): Point {
+  return {
+    x: lerp(left.x, right.x, t),
+    y: lerp(left.y, right.y, t),
+  };
+}
+
+function dotPoint(left: Point, right: Point) {
+  return left.x * right.x + left.y * right.y;
+}
+
+export function flattenQuadratic(
+  start: Point,
+  control: Point,
+  end: Point,
+  resolution: number,
+) {
   const points: Point[] = [];
   for (let index = 1; index <= resolution; index += 1) {
     const t = index / resolution;
@@ -374,12 +593,24 @@ export function flattenQuadratic(start: Point, control: Point, end: Point, resol
   return points;
 }
 
-export function flattenCubic(start: Point, controlA: Point, controlB: Point, end: Point, resolution: number) {
+export function flattenCubic(
+  start: Point,
+  controlA: Point,
+  controlB: Point,
+  end: Point,
+  resolution: number,
+) {
   const points: Point[] = [];
   for (let index = 1; index <= resolution; index += 1) {
     const t = index / resolution;
-    const a = { x: lerp(start.x, controlA.x, t), y: lerp(start.y, controlA.y, t) };
-    const b = { x: lerp(controlA.x, controlB.x, t), y: lerp(controlA.y, controlB.y, t) };
+    const a = {
+      x: lerp(start.x, controlA.x, t),
+      y: lerp(start.y, controlA.y, t),
+    };
+    const b = {
+      x: lerp(controlA.x, controlB.x, t),
+      y: lerp(controlA.y, controlB.y, t),
+    };
     const c = { x: lerp(controlB.x, end.x, t), y: lerp(controlB.y, end.y, t) };
     const d = { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) };
     const e = { x: lerp(b.x, c.x, t), y: lerp(b.y, c.y, t) };
@@ -390,12 +621,18 @@ export function flattenCubic(start: Point, controlA: Point, controlB: Point, end
 
 function pushPoint(contour: Point[], point: Point) {
   const previous = contour[contour.length - 1];
-  if (!previous || Math.hypot(previous.x - point.x, previous.y - point.y) > 0.001) {
+  if (
+    !previous ||
+    Math.hypot(previous.x - point.x, previous.y - point.y) > 0.001
+  ) {
     contour.push(point);
   }
 }
 
-export function pathToContours(commands: OpenTypeCommand[], resolution: number): Contour[] {
+export function pathToContours(
+  commands: OpenTypeCommand[],
+  resolution: number,
+): Contour[] {
   const contours: Contour[] = [];
   let points: Point[] = [];
   let current: Point | null = null;
@@ -410,7 +647,7 @@ export function pathToContours(commands: OpenTypeCommand[], resolution: number):
   }
 
   for (const command of commands) {
-    if (command.type === 'M') {
+    if (command.type === "M") {
       if (points.length > 1) finish(false);
       current = { x: command.x, y: command.y };
       start = current;
@@ -420,20 +657,24 @@ export function pathToContours(commands: OpenTypeCommand[], resolution: number):
 
     if (!current || !start) continue;
 
-    if (command.type === 'L') {
+    if (command.type === "L") {
       current = { x: command.x, y: command.y };
       pushPoint(points, current);
       continue;
     }
 
-    if (command.type === 'Q') {
-      flattenQuadratic(current, { x: command.x1, y: command.y1 }, { x: command.x, y: command.y }, segmentCount)
-        .forEach((point) => pushPoint(points, point));
+    if (command.type === "Q") {
+      flattenQuadratic(
+        current,
+        { x: command.x1, y: command.y1 },
+        { x: command.x, y: command.y },
+        segmentCount,
+      ).forEach((point) => pushPoint(points, point));
       current = { x: command.x, y: command.y };
       continue;
     }
 
-    if (command.type === 'C') {
+    if (command.type === "C") {
       flattenCubic(
         current,
         { x: command.x1, y: command.y1 },
@@ -454,33 +695,35 @@ export function pathToContours(commands: OpenTypeCommand[], resolution: number):
   return contours;
 }
 
-export function makeSideFace(a: Point, b: Point, depth: Point) {
-  return polygonToPath(makeSideFacePolygon(a, b, depth));
-}
-
-function makeSideFacePolygon(a: Point, b: Point, depth: Point) {
-  return [
-    a,
-    b,
-    { x: b.x + depth.x, y: b.y + depth.y },
-    { x: a.x + depth.x, y: a.y + depth.y },
-  ];
-}
-
 function polygonToPath(points: Point[]) {
-  if (points.length === 0) return '';
-  return `M${points.map(pointToPath).join('L')}Z`;
-}
-
-function contourToPath(points: Point[]) {
-  return polygonToPath(points);
+  if (points.length === 0) return "";
+  return `M${points.map(pointToPath).join("L")}Z`;
 }
 
 function contourSignedArea(points: Point[]) {
-  return points.reduce((area, point, index) => {
-    const next = points[(index + 1) % points.length];
-    return next ? area + point.x * next.y - point.y * next.x : area;
-  }, 0) / 2;
+  return (
+    points.reduce((area, point, index) => {
+      const next = points[(index + 1) % points.length];
+      return next ? area + point.x * next.y - point.y * next.x : area;
+    }, 0) / 2
+  );
+}
+
+function isConcaveVertex(
+  points: Point[],
+  pointIndex: number,
+  contourArea: number,
+) {
+  const previous = points[(pointIndex - 1 + points.length) % points.length];
+  const current = points[pointIndex];
+  const next = points[(pointIndex + 1) % points.length];
+  if (!previous || !current || !next) return false;
+
+  const crossProduct =
+    (current.x - previous.x) * (next.y - current.y) -
+    (current.y - previous.y) * (next.x - current.x);
+
+  return contourArea >= 0 ? crossProduct < -0.001 : crossProduct > 0.001;
 }
 
 function contourBounds(points: Point[]) {
@@ -491,29 +734,12 @@ function contourBounds(points: Point[]) {
 }
 
 function containsBounds(outer: Bounds, inner: Bounds) {
-  return outer.x1 <= inner.x1 && outer.y1 <= inner.y1 && outer.x2 >= inner.x2 && outer.y2 >= inner.y2;
-}
-
-function windingContribution(points: Point[], point: Point) {
-  let winding = 0;
-
-  points.forEach((current, index) => {
-    const next = points[(index + 1) % points.length];
-    if (!next) return;
-
-    const isLeft = (next.x - current.x) * (point.y - current.y) - (point.x - current.x) * (next.y - current.y);
-    if (current.y <= point.y) {
-      if (next.y > point.y && isLeft > 0) winding += 1;
-    } else if (next.y <= point.y && isLeft < 0) {
-      winding -= 1;
-    }
-  });
-
-  return winding;
-}
-
-function pointInGlyphFill(contours: Contour[], point: Point) {
-  return contours.reduce((winding, contour) => winding + windingContribution(contour.points, point), 0) !== 0;
+  return (
+    outer.x1 <= inner.x1 &&
+    outer.y1 <= inner.y1 &&
+    outer.x2 >= inner.x2 &&
+    outer.y2 >= inner.y2
+  );
 }
 
 function edgeNormal(a: Point, b: Point, contourArea = 0) {
@@ -526,11 +752,6 @@ function edgeNormal(a: Point, b: Point, contourArea = 0) {
   return contourArea >= 0
     ? { x: edge.y, y: -edge.x }
     : { x: -edge.y, y: edge.x };
-}
-
-export function isVisibleEdge(a: Point, b: Point, depth: Point, contourArea = 0) {
-  const normal = edgeNormal(a, b, contourArea);
-  return normal.x * depth.x + normal.y * depth.y > 0.001;
 }
 
 function seededVariation(seed: number, size: number) {
@@ -548,62 +769,55 @@ function frontColor(palette = DEFAULT_PALETTE) {
 }
 
 function extrusionColors(palette = DEFAULT_PALETTE) {
-  const colors = palette.length > 1 ? palette.slice(1) : DEFAULT_PALETTE.slice(1);
+  const colors =
+    palette.length > 1 ? palette.slice(1) : DEFAULT_PALETTE.slice(1);
   return colors.length > 0 ? colors : [BACK_COLOR];
 }
 
 function colorForGlyph(glyph: GlyphLayout, palette = DEFAULT_PALETTE) {
   const colors = extrusionColors(palette);
-  return colors[seededVariation((glyph.lineIndex + 1) * 91 + (glyph.index + 1) * 17, colors.length)] ?? BACK_COLOR;
+  return (
+    colors[
+      seededVariation(
+        (glyph.lineIndex + 1) * 91 + (glyph.index + 1) * 17,
+        colors.length,
+      )
+    ] ?? BACK_COLOR
+  );
 }
 
-function isLowerSideFace(a: Point, b: Point, normal: Point, depth: Point, bounds?: Bounds) {
-  const edge = { x: b.x - a.x, y: b.y - a.y };
-  const length = Math.max(0.001, Math.hypot(normal.x, normal.y));
-  const unitNormal = { x: normal.x / length, y: normal.y / length };
-  const edgeMidpoint = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-  const edgeLength = Math.hypot(edge.x, edge.y);
-  const nearHorizontalEdge = Math.abs(edge.y) <= Math.max(1, Math.abs(edge.x) * UNDERSIDE_EDGE_SLOPE);
-  const minEdgeLength = bounds ? Math.max(10, (bounds.x2 - bounds.x1) * UNDERSIDE_MIN_EDGE_RATIO) : 10;
-  const longEnough = edgeLength >= minEdgeLength;
-  const lowerBandSize = bounds
-    ? Math.max(4, Math.min(Math.abs(depth.y) * UNDERSIDE_BAND_RATIO, Math.max(4, (bounds.y2 - bounds.y1) * 0.18)))
-    : Infinity;
-  const inLowerBand = !bounds || (depth.y >= 0
-    ? edgeMidpoint.y >= bounds.y2 - lowerBandSize
-    : edgeMidpoint.y <= bounds.y1 + lowerBandSize);
-
-  return nearHorizontalEdge && longEnough && inLowerBand && (depth.y >= 0
-    ? unitNormal.y > LOWER_PLANE_NORMAL_THRESHOLD
-    : unitNormal.y < -LOWER_PLANE_NORMAL_THRESHOLD);
-}
-
-export function colorForEdge(a: Point, b: Point, normal: Point, depth: Point, palette = DEFAULT_PALETTE, seed = 0, bounds?: Bounds) {
-  const colors = extrusionColors(palette);
-  const planeSeed = isLowerSideFace(a, b, normal, depth, bounds) ? 101 : 503;
-  const faceSeed = seed + planeSeed;
-
-  return colors[seededVariation(faceSeed, colors.length)] ?? colors[0] ?? BACK_COLOR;
-}
-
-function colorForFaceZone(glyphIndex: number, contourIndex: number, zone: FaceZone, isHoleContour: boolean, palette = DEFAULT_PALETTE) {
+function colorForFaceZone(
+  glyphIndex: number,
+  contourIndex: number,
+  zone: FaceZone,
+  isHoleContour: boolean,
+  palette = DEFAULT_PALETTE,
+) {
   const colors = extrusionColors(palette);
   const zoneSeed: Record<FaceZone, number> = {
-    'outer-left': 17,
-    'inner-left': 131,
-    'inner-right': 269,
-    'outer-right': 421,
-    'outer-bottom': 587,
+    "outer-left": 17,
+    "inner-left": 131,
+    "inner-right": 269,
+    "outer-right": 421,
+    "outer-bottom": 587,
   };
-  const seed = (glyphIndex + 1) * 1009
-    + (contourIndex + 1) * 313
-    + zoneSeed[zone]
-    + (isHoleContour ? 719 : 0);
+  const seed =
+    (glyphIndex + 1) * 1009 +
+    (contourIndex + 1) * 313 +
+    zoneSeed[zone] +
+    (isHoleContour ? 719 : 0);
 
-  return colors[seededVariation(seed, colors.length)] ?? colors[0] ?? BACK_COLOR;
+  return (
+    colors[seededVariation(seed, colors.length)] ?? colors[0] ?? BACK_COLOR
+  );
 }
 
-function edgeFaceZone(a: Point, b: Point, normal: Point, bounds: Bounds): FaceZone {
+function edgeFaceZone(
+  a: Point,
+  b: Point,
+  normal: Point,
+  bounds: Bounds,
+): FaceZone {
   const length = Math.max(0.001, Math.hypot(normal.x, normal.y));
   const unitNormal = { x: normal.x / length, y: normal.y / length };
   const midpoint = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
@@ -611,160 +825,528 @@ function edgeFaceZone(a: Point, b: Point, normal: Point, bounds: Bounds): FaceZo
   const bottomBand = Math.max(10, (bounds.y2 - bounds.y1) * 0.18);
   const isBottom = midpoint.y >= bounds.y2 - bottomBand && unitNormal.y > 0.2;
 
-  if (isBottom) return 'outer-bottom';
-  if (midpoint.x < centerX) return unitNormal.x < 0 ? 'outer-left' : 'inner-left';
-  return unitNormal.x < 0 ? 'inner-right' : 'outer-right';
+  if (isBottom) return "outer-bottom";
+  if (midpoint.x < centerX)
+    return unitNormal.x < 0 ? "outer-left" : "inner-left";
+  return unitNormal.x < 0 ? "inner-right" : "outer-right";
 }
 
-function sideFacePlaneRank(a: Point, b: Point, normal: Point, depth: Point, bounds?: Bounds) {
-  // Horizontal/lower extrusion planes are visually behind the side walls in
-  // this poster-style projection, so side walls must occlude them.
-  return isLowerSideFace(a, b, normal, depth, bounds) ? 0 : 1;
-}
-
-function sideFaceSortKey(a: Point, b: Point, normal: Point, depth: Point, isHoleContour: boolean) {
-  const edge = { x: b.x - a.x, y: b.y - a.y };
-  const length = Math.max(0.001, Math.hypot(normal.x, normal.y));
-  const unitNormal = { x: normal.x / length, y: normal.y / length };
+function innerFaceZone(a: Point, b: Point, bounds: Bounds): FaceZone {
   const midpoint = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-  const depthLength = Math.max(0.001, Math.hypot(depth.x, depth.y));
-  const depthProjection = (midpoint.x * depth.x + midpoint.y * depth.y) / depthLength;
-  const verticalBias = Math.abs(edge.y) > Math.abs(edge.x) ? 0.2 : 0;
-  const normalBias = Math.abs(unitNormal.x) > Math.abs(unitNormal.y) ? 0.1 : 0;
-
-  // Paint side planes from deeper/back positions toward nearer/front positions.
-  // This avoids hard-coded "bottom face last" ordering, which creates colored
-  // overlaps in concave glyphs such as E and T.
-  return (isHoleContour ? -10000 : 0) - depthProjection + verticalBias + normalBias;
+  const centerX = (bounds.x1 + bounds.x2) / 2;
+  return midpoint.x < centerX ? "inner-left" : "inner-right";
 }
 
-function toClipperPath(points: Point[]) {
-  return points.map((point) => ({
-    x: Math.round(point.x * CLIPPER_SCALE),
-    y: Math.round(point.y * CLIPPER_SCALE),
-  }));
+function degreesToRadians(degrees: number) {
+  return degrees * (Math.PI / 180);
 }
 
-function fromClipperPoint(point: { x: number; y: number }): Point {
-  return {
-    x: point.x / CLIPPER_SCALE,
-    y: point.y / CLIPPER_SCALE,
-  };
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }
 
-function pathsToSvgPath(paths: Array<Array<{ x: number; y: number }>>) {
-  return paths
-    .map((path) => polygonToPath(path.map(fromClipperPoint)))
-    .filter(Boolean)
-    .join('');
-}
-
-function unionPaths(paths: Array<Array<{ x: number; y: number }>>) {
-  return paths.length > 0
-    ? Clipper.BooleanOp(ClipType.Union, paths, [], FillRule.NonZero)
-    : [];
-}
-
-function cross(left: Point, right: Point) {
-  return left.x * right.y - left.y * right.x;
-}
-
-function clipperPathCentroid(path: Array<{ x: number; y: number }>) {
-  const total = path.reduce((sum, point) => ({
-    x: sum.x + point.x,
-    y: sum.y + point.y,
-  }), { x: 0, y: 0 });
-
-  return {
-    x: total.x / Math.max(1, path.length) / CLIPPER_SCALE,
-    y: total.y / Math.max(1, path.length) / CLIPPER_SCALE,
-  };
-}
-
-function sideFaceDepthAtPoint(face: SideFace, point: Point, depth: Point) {
-  const edge = {
-    x: face.edgeB.x - face.edgeA.x,
-    y: face.edgeB.y - face.edgeA.y,
-  };
-  const denominator = cross(depth, edge);
-  if (Math.abs(denominator) < 0.0001) return 0;
-
-  return cross({ x: point.x - face.edgeA.x, y: point.y - face.edgeA.y }, edge) / denominator;
-}
-
-function clippedSideFacesByDepth(faces: SideFace[], depth: Point) {
-  const counterFaces = faces.filter((face) => face.clipPathId);
-  const exteriorFaces = faces.filter((face) => !face.clipPathId);
-  const clipperPolygons = new Map(exteriorFaces.map((face) => [face.id, toClipperPath(face.polygon)]));
-
-  return [
-    ...counterFaces,
-    ...exteriorFaces.map((face) => {
-      let paths = [clipperPolygons.get(face.id)].filter(Boolean) as Array<Array<{ x: number; y: number }>>;
-      const occluders: Array<Array<{ x: number; y: number }>> = [];
-
-      exteriorFaces.forEach((candidate) => {
-        if (candidate.id === face.id) return;
-
-        const candidatePath = clipperPolygons.get(candidate.id);
-        const facePath = clipperPolygons.get(face.id);
-        if (!candidatePath || !facePath) return;
-
-        const intersection = Clipper.BooleanOp(ClipType.Intersection, [facePath], [candidatePath], FillRule.NonZero);
-        const samplePath = intersection.find((path) => path.length > 0);
-        if (!samplePath) return;
-
-        const samplePoint = clipperPathCentroid(samplePath);
-        const faceDepth = sideFaceDepthAtPoint(face, samplePoint, depth);
-        const candidateDepth = sideFaceDepthAtPoint(candidate, samplePoint, depth);
-
-        if (candidateDepth < faceDepth - 0.001) {
-          occluders.push(candidatePath);
-        }
-      });
-
-      if (occluders.length > 0) {
-        paths = Clipper.BooleanOp(ClipType.Difference, paths, unionPaths(occluders), FillRule.NonZero);
-      }
-
-      return {
-        ...face,
-        d: pathsToSvgPath(paths),
-      };
-    }).filter((face) => face.d),
+function variedSignedRandom(
+  baseSeed: number,
+  glyphIndex: number,
+  axisSeed: number,
+) {
+  const seed = baseSeed + axisSeed;
+  const signPatterns = [
+    [-1, 1, 1, -1],
+    [1, -1, -1, 1],
+    [-1, 1, -1, 1],
+    [1, -1, 1, -1],
+    [-1, -1, 1, 1],
+    [1, 1, -1, -1],
   ];
+  const blockIndex = Math.floor(glyphIndex / 4);
+  const pattern =
+    signPatterns[
+      seededVariation(seed + blockIndex * 1709, signPatterns.length)
+    ] ?? signPatterns[0];
+  const sign = pattern[glyphIndex % pattern.length] ?? 1;
+  const magnitude = lerp(0.55, 1, seededUnit(seed + glyphIndex * 1297));
+  return clamp(sign * magnitude, -1, 1);
 }
 
-export function renderSvg(layout: TextLayout, options: RenderOptions): RenderedSvg {
+function rotateVector3D(
+  point: Point3D,
+  rotateX: number,
+  rotateY: number,
+  rotateZ: number,
+): Point3D {
+  const xAngle = degreesToRadians(rotateX);
+  const yAngle = degreesToRadians(rotateY);
+  const zAngle = degreesToRadians(rotateZ);
+  const cosX = Math.cos(xAngle);
+  const sinX = Math.sin(xAngle);
+  const cosY = Math.cos(yAngle);
+  const sinY = Math.sin(yAngle);
+  const cosZ = Math.cos(zAngle);
+  const sinZ = Math.sin(zAngle);
+  let { x, y, z } = point;
+
+  const rotatedY = y * cosX - z * sinX;
+  const rotatedZ = y * sinX + z * cosX;
+  y = rotatedY;
+  z = rotatedZ;
+
+  const tiltedX = x * cosY + z * sinY;
+  const tiltedZ = -x * sinY + z * cosY;
+  x = tiltedX;
+  z = tiltedZ;
+
+  return {
+    x: x * cosZ - y * sinZ,
+    y: x * sinZ + y * cosZ,
+    z,
+  };
+}
+
+function normalized3D(point: Point3D): Point3D {
+  const length = Math.max(0.001, Math.hypot(point.x, point.y, point.z));
+  return {
+    x: point.x / length,
+    y: point.y / length,
+    z: point.z / length,
+  };
+}
+
+function createProjector(bounds: Bounds, options: PlaneOptions) {
+  const width = Math.max(MIN_BOUNDS_SIZE, bounds.x2 - bounds.x1);
+  const height = Math.max(MIN_BOUNDS_SIZE, bounds.y2 - bounds.y1);
+  const size = Math.max(width, height);
+  const centerX = (bounds.x1 + bounds.x2) / 2;
+  const centerY = (bounds.y1 + bounds.y2) / 2;
+  const cameraX = centerX + options.cameraX * size;
+  const cameraY = centerY + options.cameraY * size;
+  const perspective = Math.max(0, options.perspective);
+  const cameraDistance = Math.max(
+    size * 0.35,
+    size * Math.max(0.8, options.cameraZ),
+  );
+
+  return (point: Point3D): Point => {
+    const denominator = Math.max(
+      cameraDistance * 0.18,
+      cameraDistance + point.z * perspective,
+    );
+    const scale = cameraDistance / denominator;
+    return {
+      x: cameraX + (point.x - cameraX) * scale,
+      y: cameraY + (point.y - cameraY) * scale,
+    };
+  };
+}
+
+function includePathData(bounds: Bounds, d: string) {
+  const tokens = d.match(/[MLCQZ]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!token || /[MLCQZ]/i.test(token)) continue;
+    const x = Number(token);
+    const y = Number(tokens[index + 1]);
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      includePoint(bounds, { x, y });
+      index += 1;
+    }
+  }
+}
+
+function boundsFromPathData(paths: string[]) {
   const bounds = emptyBounds();
-  layout.glyphs.forEach((glyph) => glyph.commands.forEach((command) => includeCommand(bounds, command)));
+  paths.forEach((path) => includePathData(bounds, path));
+  return bounds;
+}
+
+type GlyphPlane = {
+  center: Point;
+  normal: Point3D;
+  depth: number;
+  rotateX: number;
+  rotateY: number;
+  rotateZ: number;
+  sortZ: number;
+  frontZ: number;
+  backZ: number;
+  project: (point: Point, depthOffset?: number) => Point;
+  point3D: (point: Point, depthOffset?: number) => Point3D;
+};
+
+function createGlyphPlane(
+  glyph: GlyphLayout,
+  glyphIndex: number,
+  options: PlaneOptions,
+  project: (point: Point3D) => Point,
+): GlyphPlane {
+  const bounds = commandBounds(glyph.commands);
+  const center = {
+    x: (bounds.x1 + bounds.x2) / 2,
+    y: (bounds.y1 + bounds.y2) / 2,
+  };
+  const baseSeed = Number(options.seed) + (glyph.lineIndex + 1) * 1009;
+  const rotateX =
+    options.baseRotateX +
+    variedSignedRandom(baseSeed, glyphIndex, 11) * options.randomRotateX;
+  const rotateY =
+    options.baseRotateY +
+    variedSignedRandom(baseSeed, glyphIndex, 23) * options.randomRotateY;
+  const rotateZ =
+    options.baseRotateZ +
+    variedSignedRandom(baseSeed, glyphIndex, 37) * options.randomRotateZ;
+  const normal = normalized3D(
+    rotateVector3D({ x: 0, y: 0, z: -1 }, rotateX, rotateY, rotateZ),
+  );
+  const depth = options.randomDepth
+    ? (() => {
+        const minDepth = Math.max(
+          0,
+          Math.min(options.minDepth, options.maxDepth),
+        );
+        const maxDepth = Math.max(
+          0,
+          Math.max(options.minDepth, options.maxDepth),
+        );
+        const depthMix = (variedSignedRandom(baseSeed, glyphIndex, 53) + 1) / 2;
+        return lerp(minDepth, maxDepth, depthMix);
+      })()
+    : Math.max(0, options.depth);
+  const scaledDepth = depth * Math.max(0.01, options.depthScale);
+
+  function point3D(point: Point, depthOffset = 0): Point3D {
+    const rotated = rotateVector3D(
+      {
+        x: point.x - center.x,
+        y: point.y - center.y,
+        z: 0,
+      },
+      rotateX,
+      rotateY,
+      rotateZ,
+    );
+
+    return {
+      x: center.x + rotated.x + normal.x * depthOffset,
+      y: center.y + rotated.y + normal.y * depthOffset,
+      z: rotated.z + normal.z * depthOffset,
+    };
+  }
+
+  return {
+    center,
+    normal,
+    depth: scaledDepth,
+    rotateX,
+    rotateY,
+    rotateZ,
+    sortZ: (point3D(center).z + point3D(center, scaledDepth).z) / 2,
+    frontZ: point3D(center).z,
+    backZ: point3D(center, scaledDepth).z,
+    project: (point, depthOffset = 0) => project(point3D(point, depthOffset)),
+    point3D,
+  };
+}
+
+function projectCommands(
+  commands: OpenTypeCommand[],
+  plane: GlyphPlane,
+  depthOffset = 0,
+) {
+  return commands.map((command) => {
+    if (command.type === "M" || command.type === "L")
+      return { ...command, ...plane.project(command, depthOffset) };
+    if (command.type === "Q") {
+      const control = plane.project(
+        { x: command.x1, y: command.y1 },
+        depthOffset,
+      );
+      return {
+        ...command,
+        ...plane.project(command, depthOffset),
+        x1: control.x,
+        y1: control.y,
+      };
+    }
+
+    if (command.type === "C") {
+      const controlA = plane.project(
+        { x: command.x1, y: command.y1 },
+        depthOffset,
+      );
+      const controlB = plane.project(
+        { x: command.x2, y: command.y2 },
+        depthOffset,
+      );
+      return {
+        ...command,
+        ...plane.project(command, depthOffset),
+        x1: controlA.x,
+        y1: controlA.y,
+        x2: controlB.x,
+        y2: controlB.y,
+      };
+    }
+
+    return command;
+  });
+}
+
+function projectedSideFace(
+  a: Point,
+  b: Point,
+  plane: GlyphPlane,
+  startRatio = 0,
+  endRatio = 1,
+) {
+  const segmentA = lerpPoint(a, b, startRatio);
+  const segmentB = lerpPoint(a, b, endRatio);
+  const frontA = plane.project(segmentA);
+  const frontB = plane.project(segmentB);
+  const backB = plane.project(segmentB, plane.depth);
+  const backA = plane.project(segmentA, plane.depth);
+
+  return {
+    d: polygonToPath([frontA, frontB, backB, backA]),
+    polygon: [frontA, frontB, backB, backA],
+    sortZ:
+      (plane.point3D(segmentA).z +
+        plane.point3D(segmentB).z +
+        plane.point3D(segmentB, plane.depth).z +
+        plane.point3D(segmentA, plane.depth).z) /
+      4,
+  };
+}
+
+function projectedSideRun(edges: SideEdge[], plane: GlyphPlane) {
+  const sourcePoints =
+    edges.length > 0 ? [edges[0].a, ...edges.map((edge) => edge.b)] : [];
+  const frontPoints = sourcePoints.map((point) => plane.project(point));
+  const backPoints = [...sourcePoints]
+    .reverse()
+    .map((point) => plane.project(point, plane.depth));
+  const polygon = [...frontPoints, ...backPoints];
+  const allZ = sourcePoints.flatMap((point) => [
+    plane.point3D(point).z,
+    plane.point3D(point, plane.depth).z,
+  ]);
+  const sortZ = allZ.reduce((sum, z) => sum + z, 0) / Math.max(1, allZ.length);
+
+  return {
+    d: polygonToPath(polygon),
+    polygon,
+    sortZ,
+  };
+}
+
+function sideVisibilityScore(
+  face: ReturnType<typeof projectedSideFace>,
+  projectedContourArea: number,
+) {
+  const [frontA, frontB, backB, backA] = face.polygon;
+  if (!frontA || !frontB || !backB || !backA) return 0;
+
+  const normal = edgeNormal(frontA, frontB, projectedContourArea);
+  const frontMidpoint = {
+    x: (frontA.x + frontB.x) / 2,
+    y: (frontA.y + frontB.y) / 2,
+  };
+  const backMidpoint = {
+    x: (backA.x + backB.x) / 2,
+    y: (backA.y + backB.y) / 2,
+  };
+  const depthVector = {
+    x: backMidpoint.x - frontMidpoint.x,
+    y: backMidpoint.y - frontMidpoint.y,
+  };
+
+  return dotPoint(normal, depthVector);
+}
+
+function contourVisibilityScore(
+  face: ReturnType<typeof projectedSideFace>,
+  projectedContourArea: number,
+  isHoleContour: boolean,
+) {
+  const score = sideVisibilityScore(face, projectedContourArea);
+  return isHoleContour ? -score : score;
+}
+
+function groupSideEdges(edges: SideEdge[], edgeCount: number): SideEdgeRun[] {
+  function edgeDirection(edge: SideEdge) {
+    const dx = edge.b.x - edge.a.x;
+    const dy = edge.b.y - edge.a.y;
+    const length = Math.max(0.001, Math.hypot(dx, dy));
+    return { x: dx / length, y: dy / length };
+  }
+
+  function edgesContinueSmoothly(previous: SideEdge, current: SideEdge) {
+    const previousDirection = edgeDirection(previous);
+    const currentDirection = edgeDirection(current);
+    // Keep flattened curves in one colored face, but split sharp corners
+    // such as the inner crossing planes in X into separate SVG paths.
+    return dotPoint(previousDirection, currentDirection) >= FACE_RUN_MIN_DOT;
+  }
+
+  const runs = edges.reduce<SideEdgeRun[]>((result, edge) => {
+    const previousRun = result[result.length - 1];
+    const previousEdge = previousRun?.edges[previousRun.edges.length - 1];
+    const continuesPrevious =
+      previousRun &&
+      previousRun.zone === edge.zone &&
+      previousEdge &&
+      edge.pointIndex === previousEdge.pointIndex + 1 &&
+      edgesContinueSmoothly(previousEdge, edge);
+
+    if (continuesPrevious) {
+      previousRun.edges.push(edge);
+    } else {
+      result.push({ index: result.length, zone: edge.zone, edges: [edge] });
+    }
+
+    return result;
+  }, []);
+
+  const firstRun = runs[0];
+  const lastRun = runs[runs.length - 1];
+  const firstEdge = firstRun?.edges[0];
+  const lastEdge = lastRun?.edges[lastRun.edges.length - 1];
+  if (
+    runs.length > 1 &&
+    firstRun &&
+    lastRun &&
+    firstRun.zone === lastRun.zone &&
+    firstEdge?.pointIndex === 0 &&
+    lastEdge?.pointIndex === edgeCount - 1 &&
+    edgesContinueSmoothly(lastEdge, firstEdge)
+  ) {
+    firstRun.edges = [...lastRun.edges, ...firstRun.edges];
+    runs.pop();
+  }
+
+  return runs.map((run, index) => ({ ...run, index }));
+}
+
+function faceDepthTieBreaker(kind: RenderFace["kind"]) {
+  if (kind === "back") return 0;
+  if (kind === "side") return 1;
+  return 2;
+}
+
+function keepOwnFrontFaceOnTop(faces: RenderFace[]) {
+  const result = [...faces];
+  const glyphIndices = Array.from(
+    new Set(result.map((face) => face.glyphIndex)),
+  );
+
+  glyphIndices.forEach((glyphIndex) => {
+    const frontIndex = result.findIndex(
+      (face) => face.glyphIndex === glyphIndex && face.kind === "front",
+    );
+    if (frontIndex < 0) return;
+
+    const lastOwnNonFrontIndex = result.reduce(
+      (lastIndex, face, index) =>
+        face.glyphIndex === glyphIndex && face.kind !== "front"
+          ? index
+          : lastIndex,
+      -1,
+    );
+    if (lastOwnNonFrontIndex < frontIndex) return;
+
+    const [frontFace] = result.splice(frontIndex, 1);
+    const insertAfter = result.reduce(
+      (lastIndex, face, index) =>
+        face.glyphIndex === glyphIndex && face.kind !== "front"
+          ? index
+          : lastIndex,
+      -1,
+    );
+    result.splice(insertAfter + 1, 0, frontFace);
+  });
+
+  return result;
+}
+
+export function renderSvg(
+  layout: TextLayout,
+  options: RenderOptions,
+): RenderedSvg {
+  const projector = createProjector(layout.bounds, options.plane);
   const sideFaces: SideFace[] = [];
-  const glyphClips: GlyphClip[] = [];
+  const frontFaces: GlyphLayout[] = [];
+  const backFaces: GlyphLayout[] = [];
+  const faceGroups: RenderFaceGroup[] = [];
 
   layout.glyphs.forEach((glyph, glyphIndex) => {
-    const contours = pathToContours(glyph.commands, options.resolution).map((contour) => ({
-      ...contour,
-      bounds: contourBounds(contour.points),
-    }));
+    const plane = createGlyphPlane(glyph, glyphIndex, options.plane, projector);
+    const glyphRenderFaces: RenderFace[] = [];
+    const frontCommands = projectCommands(glyph.commands, plane);
+    const frontFace = {
+      ...glyph,
+      d: commandsToPath(frontCommands),
+      commands: frontCommands,
+    };
+    frontFaces.push(frontFace);
+
+    if (options.showBack) {
+      const backCommands = projectCommands(glyph.commands, plane, plane.depth);
+      const backFace = {
+        ...glyph,
+        d: commandsToPath(backCommands),
+        commands: backCommands,
+      };
+      backFaces.push(backFace);
+      glyphRenderFaces.push({
+        id: `${glyph.id}-back`,
+        kind: "back",
+        d: backFace.d,
+        fill: colorForGlyph(glyph, options.palette),
+        glyphIndex,
+        lineIndex: glyph.lineIndex,
+        sortZ: plane.backZ,
+        polygons: [],
+        opacity: BACK_OPACITY,
+      });
+    }
+
+    const contours = pathToContours(glyph.commands, options.resolution).map(
+      (contour) => ({
+        ...contour,
+        bounds: contourBounds(contour.points),
+      }),
+    );
     const contourMeta = contours.map((contour, contourIndex) => ({
-      isHole: contours.some((candidate, candidateIndex) => (
-        candidateIndex !== contourIndex && containsBounds(candidate.bounds, contour.bounds)
-      )),
+      isHole: contours.some(
+        (candidate, candidateIndex) =>
+          candidateIndex !== contourIndex &&
+          containsBounds(candidate.bounds, contour.bounds),
+      ),
       clipPathId: `${glyph.id}-hole-${contourIndex}-clip`,
     }));
-
+    const frontPolygons = contours
+      .filter((_, contourIndex) => !contourMeta[contourIndex]?.isHole)
+      .map((contour) => contour.points.map((point) => plane.project(point)));
+    const orderedFrontFace: RenderFace = {
+      id: `${glyph.id}-front`,
+      kind: "front",
+      d: frontFace.d,
+      fill: frontColor(options.palette),
+      glyphIndex,
+      lineIndex: glyph.lineIndex,
+      sortZ: plane.frontZ,
+      polygons: frontPolygons,
+    };
     contours.forEach((contour, contourIndex) => {
-      const meta = contourMeta[contourIndex];
-      if (meta?.isHole) {
-        glyphClips.push({ id: meta.clipPathId, d: contourToPath(contour.points) });
-      }
-    });
-
-    contours.forEach((contour, contourIndex) => {
-      const edgeCount = contour.closed ? contour.points.length : contour.points.length - 1;
-      const contourArea = contour.closed ? contourSignedArea(contour.points) : -1;
+      const edgeCount = contour.closed
+        ? contour.points.length
+        : contour.points.length - 1;
+      const contourArea = contour.closed
+        ? contourSignedArea(contour.points)
+        : -1;
+      const projectedContourArea = contour.closed
+        ? contourSignedArea(contour.points.map((point) => plane.project(point)))
+        : -1;
       const isHoleContour = Boolean(contourMeta[contourIndex]?.isHole);
-      const clipPathId = contourMeta[contourIndex]?.clipPathId;
       const visibleEdges: SideEdge[] = [];
       if (isHoleContour && !options.renderInnerFaces) return;
 
@@ -772,83 +1354,168 @@ export function renderSvg(layout: TextLayout, options: RenderOptions): RenderedS
         const a = contour.points[pointIndex];
         const b = contour.points[(pointIndex + 1) % contour.points.length];
         if (!a || !b) continue;
+        const nextPointIndex = (pointIndex + 1) % contour.points.length;
         const normal = edgeNormal(a, b, contourArea);
-        const normalLength = Math.max(0.001, Math.hypot(normal.x, normal.y));
-        const edgeMidpoint = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-        const outsideSample = {
-          x: edgeMidpoint.x + (normal.x / normalLength) * 0.75,
-          y: edgeMidpoint.y + (normal.y / normalLength) * 0.75,
-        };
-        if (!isHoleContour && pointInGlyphFill(contours, outsideSample)) continue;
-        if (!isHoleContour && options.visibleSurfaceOnly && !isVisibleEdge(a, b, options.depth, contourArea)) continue;
+        const fullProjectedFace = projectedSideFace(a, b, plane);
+        const visibilityScore = contourVisibilityScore(
+          fullProjectedFace,
+          projectedContourArea,
+          isHoleContour,
+        );
+        if (options.visibleSurfaceOnly && visibilityScore <= 0.001) continue;
+        const concaveEdge =
+          !isHoleContour &&
+          (isConcaveVertex(contour.points, pointIndex, contourArea) ||
+            isConcaveVertex(contour.points, nextPointIndex, contourArea));
+        const edgeVector = { x: b.x - a.x, y: b.y - a.y };
+        const horizontalNotchEdge =
+          concaveEdge && Math.abs(edgeVector.x) > Math.abs(edgeVector.y) * 1.8;
 
-        const planeRank = sideFacePlaneRank(a, b, normal, options.depth, contour.bounds);
         visibleEdges.push({
           pointIndex,
           a,
           b,
           normal,
-          zone: edgeFaceZone(a, b, normal, contour.bounds),
-          planeRank,
-          sortKey: sideFaceSortKey(a, b, normal, options.depth, isHoleContour),
-          clipPathId: isHoleContour ? clipPathId : undefined,
+          zone: horizontalNotchEdge
+            ? innerFaceZone(a, b, contour.bounds)
+            : edgeFaceZone(a, b, normal, contour.bounds),
+          planeRank: 0,
+          sortKey: 0,
         });
       }
 
-      visibleEdges.forEach((edge) => {
-        const runColor = colorForFaceZone(glyphIndex, contourIndex, edge.zone, isHoleContour, options.palette);
+      groupSideEdges(visibleEdges, edgeCount).forEach((run) => {
+        const firstEdge = run.edges[0];
+        if (!firstEdge) return;
+        const runColor = colorForFaceZone(
+          glyphIndex + Math.round(options.plane.seed),
+          contourIndex + run.index,
+          run.zone,
+          isHoleContour,
+          options.palette,
+        );
+        const projectedFace = projectedSideRun(run.edges, plane);
+        const visibilityScore =
+          run.edges.reduce(
+            (score, edge) =>
+              score +
+              contourVisibilityScore(
+                projectedSideFace(edge.a, edge.b, plane),
+                projectedContourArea,
+                isHoleContour,
+              ),
+            0,
+          ) / Math.max(1, run.edges.length);
+        const id = `${glyph.id}-side-${contourIndex}-${run.index}`;
         sideFaces.push({
-          id: `${glyph.id}-side-${contourIndex}-${edge.pointIndex}`,
-          d: makeSideFace(edge.a, edge.b, options.depth),
-          polygon: makeSideFacePolygon(edge.a, edge.b, options.depth),
-          edgeA: edge.a,
-          edgeB: edge.b,
+          id,
+          d: projectedFace.d,
+          polygon: projectedFace.polygon,
+          edgeA: projectedFace.polygon[0],
+          edgeB: projectedFace.polygon[1],
           fill: runColor,
           glyphIndex,
-          planeRank: edge.planeRank,
-          sortKey: edge.sortKey,
-          clipPathId: edge.clipPathId,
+          planeRank: plane.sortZ,
+          sortKey: projectedFace.sortZ,
+          zone: run.zone,
+          edgeIndex: firstEdge.pointIndex,
         });
+        if (options.showSides) {
+          glyphRenderFaces.push({
+            id,
+            kind: "side",
+            d: projectedFace.d,
+            fill: runColor,
+            glyphIndex,
+            lineIndex: glyph.lineIndex,
+            sortZ: projectedFace.sortZ,
+            polygons: [projectedFace.polygon],
+            zone: run.zone,
+            edgeIndex: firstEdge.pointIndex,
+            visibilityScore,
+          });
+        }
       });
     });
+    if (options.showFront) glyphRenderFaces.push(orderedFrontFace);
+    const orderedGlyphFaces = keepOwnFrontFaceOnTop(
+      glyphRenderFaces.sort(
+        (left, right) =>
+          left.sortZ - right.sortZ ||
+          faceDepthTieBreaker(left.kind) - faceDepthTieBreaker(right.kind),
+      ),
+    );
+    faceGroups.push({
+      id: `${glyph.id}-group`,
+      glyphIndex,
+      lineIndex: glyph.lineIndex,
+      sortX: plane.center.x,
+      sortZ: plane.frontZ,
+      rotateX: plane.rotateX,
+      rotateY: plane.rotateY,
+      rotateZ: plane.rotateZ,
+      faces: orderedGlyphFaces,
+    });
   });
-  sideFaces.sort((left, right) => {
-    const glyphOrder = options.depth.x < 0
-      ? left.glyphIndex - right.glyphIndex
-      : right.glyphIndex - left.glyphIndex;
-
-    return left.planeRank - right.planeRank || glyphOrder || left.sortKey - right.sortKey;
-  });
-  const visibleSideFaces = clippedSideFacesByDepth(sideFaces, options.depth);
+  sideFaces.sort(
+    (left, right) =>
+      right.planeRank - left.planeRank ||
+      right.sortKey - left.sortKey ||
+      left.glyphIndex - right.glyphIndex,
+  );
+  const orderedFaceGroups = faceGroups.sort(
+    (left, right) =>
+      right.sortX - left.sortX ||
+      left.sortZ - right.sortZ ||
+      left.glyphIndex - right.glyphIndex,
+  );
+  const orderedFaces = orderedFaceGroups.flatMap((group) => group.faces);
+  const outputSideFaces = options.showSides ? sideFaces : [];
+  const outputFrontFaces = options.showFront ? frontFaces : [];
+  const outputBackFaces = options.showBack ? backFaces : [];
+  const outputBounds = boundsFromPathData([
+    ...outputSideFaces.map((face) => face.d),
+    ...outputFrontFaces.map((glyph) => glyph.d),
+    ...outputBackFaces.map((glyph) => glyph.d),
+  ]);
 
   return {
-    sideFaces: options.showSides ? visibleSideFaces : [],
-    frontFaces: options.showFront ? layout.glyphs : [],
-    backFaces: options.showBack ? layout.glyphs : [],
-    glyphClips,
-    viewBox: padBounds(bounds, STABLE_VIEWBOX_PADDING),
+    sideFaces: outputSideFaces,
+    frontFaces: outputFrontFaces,
+    backFaces: outputBackFaces,
+    glyphClips: [],
+    orderedFaces,
+    orderedFaceGroups,
+    viewBox: padBounds(outputBounds, VIEWBOX_PADDING),
   };
 }
 
 function useOpenTypeFont(url: string) {
   const [font, setFont] = useState<OpenTypeFont | null>(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
     setFont(null);
-    setError('');
+    setError("");
 
     async function loadFont() {
       try {
-        const buffer = await fetch(url, { signal: controller.signal }).then((response) => {
-          if (!response.ok) throw new Error(`Font request failed with ${response.status}`);
-          return response.arrayBuffer();
-        });
+        const buffer = await fetch(url, { signal: controller.signal }).then(
+          (response) => {
+            if (!response.ok)
+              throw new Error(`Font request failed with ${response.status}`);
+            return response.arrayBuffer();
+          },
+        );
         setFont((opentype as OpenTypeParser).parse(buffer) as OpenTypeFont);
       } catch (loadError) {
         if (!controller.signal.aborted) {
-          setError(loadError instanceof Error ? loadError.message : 'Unable to load font');
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Unable to load font",
+          );
         }
       }
     }
@@ -862,21 +1529,30 @@ function useOpenTypeFont(url: string) {
 
 export default function SvgTypeExtrusion() {
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const defaultFamily = getFontFamilyById('geist');
-  const [selectedFontFamilyId, setSelectedFontFamilyId] = useState(defaultFamily.id);
-  const selectedFontFamily = getFontFamilyById(selectedFontFamilyId);
-  const [selectedFontValue, setSelectedFontValue] = useState(
-    geistFonts.find((font) => font.variant === 'Black')?.value ?? selectedFontFamily.defaultFont.value,
+  const defaultFamily = getFontFamilyById(DEFAULT_FONT_FAMILY_ID);
+  const defaultFont = getFontByValue(
+    defaultFamily.fonts,
+    DEFAULT_FONT_VALUE,
+    defaultFamily.defaultFont,
   );
-  const selectedFont = getFontByValue(selectedFontFamily.fonts, selectedFontValue, selectedFontFamily.defaultFont);
+  const [selectedFontFamilyId, setSelectedFontFamilyId] = useState(
+    defaultFamily.id,
+  );
+  const selectedFontFamily = getFontFamilyById(selectedFontFamilyId);
+  const [selectedFontValue, setSelectedFontValue] = useState(defaultFont.value);
+  const selectedFont = getFontByValue(
+    selectedFontFamily.fonts,
+    selectedFontValue,
+    selectedFontFamily.defaultFont,
+  );
 
   const typography = useControls(
-    'Typography',
+    "Typography",
     {
       fontFamily: {
         value: selectedFontFamily.id,
         options: getFontFamilyOptions(),
-        label: 'family',
+        label: "family",
         onChange: (familyId: string) => {
           const nextFamily = getFontFamilyById(familyId);
           setSelectedFontFamilyId(nextFamily.id);
@@ -886,98 +1562,241 @@ export default function SvgTypeExtrusion() {
       fontVariant: {
         value: selectedFont.value,
         options: getFontVariantOptions(selectedFontFamily.fonts),
-        label: 'variant',
+        label: "variant",
         onChange: (value: string) => {
           setSelectedFontValue(value);
         },
       },
-      text: { value: DEFAULT_TEXT, rows: 4, label: 'text' },
-      fontSize: { ...nativeNumber({ current: 220, min: 36, max: 520, step: 1 }), label: 'font size' },
-      lineHeight: { ...nativeNumber({ current: 1.01, min: 0.45, max: 1.5, step: 0.01 }), label: 'line height' },
-      letterSpacing: { ...nativeNumber({ current: 0, min: -40, max: 180, step: 0.5 }), label: 'letter spacing' },
+      text: { value: DEFAULT_TEXT, rows: 4, label: "text" },
+      fontSize: {
+        ...nativeNumber({
+          current: DEFAULT_FONT_SIZE,
+          min: 36,
+          max: 520,
+          step: 1,
+        }),
+        label: "font size",
+      },
+      lineHeight: {
+        ...nativeNumber({ current: 1.01, min: 0.45, max: 1.5, step: 0.01 }),
+        label: "line height",
+      },
+      letterSpacing: {
+        ...nativeNumber({ current: 0, min: -40, max: 180, step: 0.5 }),
+        label: "letter spacing",
+      },
       alignment: {
-        value: 'left',
-        options: ['left', 'center', 'right', 'poster'],
-        label: 'alignment',
+        value: "left",
+        options: ["left", "center", "right", "poster"],
+        label: "alignment",
       },
     },
     { collapsed: false },
     [selectedFontFamily.id, selectedFont.value],
   );
 
-  const rotation = useControls('Rotation', {
-    spin: { ...nativeNumber({ current: 0, min: 0, max: 1, step: 0.01 }), label: 'spin' },
-    xAxis: { ...nativeNumber({ current: 0, min: 0, max: 1, step: 0.01 }), label: 'x axis' },
-    yAxis: { ...nativeNumber({ current: 0, min: 0, max: 1, step: 0.01 }), label: 'y axis' },
-  }, { collapsed: false });
+  const plane = useControls(
+    "Character Planes",
+    {
+      seed: {
+        ...nativeNumber({ current: 2206, min: 0, max: 9999, step: 1 }),
+        label: "seed",
+      },
+      baseRotateX: {
+        ...nativeNumber({ current: -18, min: -75, max: 75, step: 1 }),
+        label: "base x",
+      },
+      baseRotateY: {
+        ...nativeNumber({ current: 32, min: -75, max: 75, step: 1 }),
+        label: "base y",
+      },
+      baseRotateZ: {
+        ...nativeNumber({ current: 0, min: -180, max: 180, step: 1 }),
+        label: "base z",
+      },
+      randomRotateX: {
+        ...nativeNumber({ current: 16, min: 0, max: 90, step: 1 }),
+        label: "random x",
+      },
+      randomRotateY: {
+        ...nativeNumber({ current: 12, min: 0, max: 90, step: 1 }),
+        label: "random y",
+      },
+      randomRotateZ: {
+        ...nativeNumber({ current: 7, min: 0, max: 90, step: 1 }),
+        label: "random z",
+      },
+      perspective: {
+        ...nativeNumber({ current: 1, min: 0, max: 2.5, step: 0.05 }),
+        label: "perspective",
+      },
+      cameraX: {
+        ...nativeNumber({ current: -0.15, min: -2, max: 2, step: 0.05 }),
+        label: "camera x",
+      },
+      cameraY: {
+        ...nativeNumber({ current: -0.05, min: -2, max: 2, step: 0.05 }),
+        label: "camera y",
+      },
+      cameraZ: {
+        ...nativeNumber({ current: 9, min: 0.8, max: 9, step: 0.1 }),
+        label: "camera z",
+      },
+    },
+    { collapsed: false },
+  );
 
-  const extrusion = useControls('Extrusion', {
-    depthX: { ...nativeNumber({ current: -36, min: -MAX_EXTRUSION_DEPTH, max: MAX_EXTRUSION_DEPTH, step: 1 }), label: 'depth x' },
-    depthY: { ...nativeNumber({ current: 27, min: -MAX_EXTRUSION_DEPTH, max: MAX_EXTRUSION_DEPTH, step: 1 }), label: 'depth y' },
-    resolution: { ...nativeNumber({ current: 20, min: 2, max: 32, step: 1 }), label: 'flattening' },
-    visibleSurfaceOnly: { value: true, label: 'visible sides' },
-    renderInnerFaces: { value: true, label: 'inner faces' },
-  }, { collapsed: false });
+  const extrusion = useControls(
+    "Extrusion",
+    {
+      depth: {
+        ...nativeNumber({
+          current: 32,
+          min: 0,
+          max: MAX_EXTRUSION_DEPTH,
+          step: 1,
+        }),
+        label: "depth",
+      },
+      randomDepth: { value: false, label: "random depth" },
+      minDepth: {
+        ...nativeNumber({
+          current: 16,
+          min: 0,
+          max: MAX_EXTRUSION_DEPTH,
+          step: 1,
+        }),
+        label: "min depth",
+      },
+      maxDepth: {
+        ...nativeNumber({
+          current: 48,
+          min: 0,
+          max: MAX_EXTRUSION_DEPTH,
+          step: 1,
+        }),
+        label: "max depth",
+      },
+    },
+    { collapsed: false },
+  );
 
-  const drawing = useControls('Drawing', {
-    showFront: { value: true, label: 'front face' },
-    showSides: { value: true, label: 'side faces' },
-    showBack: { value: false, label: 'back face' },
-    posterOffsetX: { ...nativeNumber({ current: -56, min: -180, max: 180, step: 1 }), label: 'line x' },
-    posterOffsetY: { ...nativeNumber({ current: -16, min: -120, max: 120, step: 1 }), label: 'line y' },
-    randomizeColors: { value: false, label: 'glyph variation' },
-    debugStroke: { value: false, label: 'debug stroke' },
-    Color: folder({
-      background: '#ffffff',
-      sidePalette: colorPalette({
-        value: { source: 'extruded-poster', colors: DEFAULT_PALETTE },
-        palettes: extrusionPalettePresets,
-      }),
-    }, { collapsed: false }),
-  }, { collapsed: false });
+  const drawing = useControls(
+    "Drawing",
+    {
+      showFront: { value: true, label: "front face" },
+      showSides: { value: true, label: "side faces" },
+      showBack: { value: false, label: "back face" },
+      randomizeColors: { value: false, label: "glyph variation" },
+      faceBorders: { value: true, label: "stroke" },
+      borderColor: "#000000",
+      borderWidth: {
+        ...nativeNumber({ current: 1.5, min: 0.25, max: 12, step: 0.25 }),
+        label: "border width",
+      },
+      Color: folder(
+        {
+          background: "#ffffff",
+          sidePalette: colorPalette({
+            value: { source: "extruded-poster", colors: DEFAULT_PALETTE },
+            palettes: extrusionPalettePresets,
+          }),
+        },
+        { collapsed: false },
+      ),
+    },
+    { collapsed: false },
+  );
 
   useControls({
-    'Download SVG': button(() => downloadSvg(svgRef.current, 'extruded-type.svg', { horizontalPaddingRatio: 0 })),
+    "Download SVG": button(() =>
+      downloadSvg(svgRef.current, "extruded-type.svg", {
+        horizontalPaddingRatio: 0,
+      }),
+    ),
   });
 
   const { font, error } = useOpenTypeFont(selectedFont.url);
   const inputText = String(typography.text);
-  const depth = {
-    x: Number(extrusion.depthX),
-    y: Number(extrusion.depthY),
-  };
   const layout = useMemo(() => {
     if (!font) return null;
     return layoutText(font, inputText, {
       fontSize: Number(typography.fontSize),
       lineHeight: Number(typography.lineHeight),
       letterSpacing: Number(typography.letterSpacing),
-      rotationSpin: Number(rotation.spin),
-      rotationX: Number(rotation.xAxis),
-      rotationY: Number(rotation.yAxis),
+      rotationSpin: 0,
+      rotationX: 0,
+      rotationY: 0,
       alignment: typography.alignment as TextAlignment,
-      posterOffsetX: Number(drawing.posterOffsetX),
-      posterOffsetY: Number(drawing.posterOffsetY),
+      posterOffsetX: DEFAULT_POSTER_OFFSET_X,
+      posterOffsetY: DEFAULT_POSTER_OFFSET_Y,
     });
-  }, [drawing.posterOffsetX, drawing.posterOffsetY, font, inputText, rotation.spin, rotation.xAxis, rotation.yAxis, typography.alignment, typography.fontSize, typography.letterSpacing, typography.lineHeight]);
+  }, [
+    font,
+    inputText,
+    typography.alignment,
+    typography.fontSize,
+    typography.letterSpacing,
+    typography.lineHeight,
+  ]);
   const activePalette = drawing.sidePalette.colors?.length
     ? drawing.sidePalette.colors
     : DEFAULT_PALETTE;
 
   const rendered = useMemo(() => {
     if (!layout) return null;
+    const depthScale = layout.fontSize / DEFAULT_FONT_SIZE;
     return renderSvg(layout, {
-      depth,
-      resolution: Number(extrusion.resolution),
+      plane: {
+        seed: Number(plane.seed),
+        baseRotateX: Number(plane.baseRotateX),
+        baseRotateY: Number(plane.baseRotateY),
+        baseRotateZ: Number(plane.baseRotateZ),
+        randomRotateX: Number(plane.randomRotateX),
+        randomRotateY: Number(plane.randomRotateY),
+        randomRotateZ: Number(plane.randomRotateZ),
+        depth: Number(extrusion.depth),
+        randomDepth: Boolean(extrusion.randomDepth),
+        minDepth: Number(extrusion.minDepth),
+        maxDepth: Number(extrusion.maxDepth),
+        depthScale,
+        perspective: Number(plane.perspective),
+        cameraX: Number(plane.cameraX),
+        cameraY: Number(plane.cameraY),
+        cameraZ: Number(plane.cameraZ),
+      },
+      resolution: DEFAULT_FLATTENING_RESOLUTION,
       showFront: Boolean(drawing.showFront),
       showSides: Boolean(drawing.showSides),
       showBack: Boolean(drawing.showBack),
-      visibleSurfaceOnly: Boolean(extrusion.visibleSurfaceOnly),
-      renderInnerFaces: Boolean(extrusion.renderInnerFaces),
+      visibleSurfaceOnly: true,
+      renderInnerFaces: true,
       randomizeColors: Boolean(drawing.randomizeColors),
       palette: activePalette,
     });
-  }, [activePalette, depth.x, depth.y, drawing.debugStroke, drawing.randomizeColors, drawing.showBack, drawing.showFront, drawing.showSides, extrusion.renderInnerFaces, extrusion.resolution, extrusion.visibleSurfaceOnly, layout]);
+  }, [
+    activePalette,
+    drawing.randomizeColors,
+    drawing.showBack,
+    drawing.showFront,
+    drawing.showSides,
+    extrusion.depth,
+    extrusion.maxDepth,
+    extrusion.minDepth,
+    extrusion.randomDepth,
+    layout,
+    plane.baseRotateX,
+    plane.baseRotateY,
+    plane.baseRotateZ,
+    plane.cameraX,
+    plane.cameraY,
+    plane.cameraZ,
+    plane.perspective,
+    plane.randomRotateX,
+    plane.randomRotateY,
+    plane.randomRotateZ,
+    plane.seed,
+  ]);
 
   if (error) {
     return (
@@ -988,7 +1807,7 @@ export default function SvgTypeExtrusion() {
     );
   }
 
-  if (!font || !rendered) {
+  if (!font || !layout || !rendered) {
     return (
       <section className="sketch-workbench">
         <div className="canvas-state">Loading font...</div>
@@ -997,9 +1816,15 @@ export default function SvgTypeExtrusion() {
     );
   }
 
-  const depthTransform = `translate(${round(depth.x)} ${round(depth.y)})`;
-  const strokeProps = drawing.debugStroke
-    ? { stroke: '#ffffff', strokeWidth: 1.5, vectorEffect: 'non-scaling-stroke' as const }
+  const depthScale = layout.fontSize / DEFAULT_FONT_SIZE;
+  const strokeProps = drawing.faceBorders
+    ? {
+        stroke: String(drawing.borderColor),
+        strokeWidth: Number(drawing.borderWidth),
+        strokeLinejoin: "round" as const,
+        strokeLinecap: "round" as const,
+        vectorEffect: "non-scaling-stroke" as const,
+      }
     : {};
 
   return (
@@ -1017,54 +1842,75 @@ export default function SvgTypeExtrusion() {
           {rendered.glyphClips.length > 0 && (
             <defs>
               {rendered.glyphClips.map((clip) => (
-                <clipPath key={clip.id} id={clip.id} clipPathUnits="userSpaceOnUse">
+                <clipPath
+                  key={clip.id}
+                  id={clip.id}
+                  clipPathUnits="userSpaceOnUse"
+                >
                   <path d={clip.d} />
                 </clipPath>
               ))}
             </defs>
           )}
-          <rect x={rendered.viewBox.x1} y={rendered.viewBox.y1} width={rendered.viewBox.x2 - rendered.viewBox.x1} height={rendered.viewBox.y2 - rendered.viewBox.y1} fill={String(drawing.background)} />
-          <g className="extruded-text">
-            <g className="back-faces" transform={depthTransform} opacity={BACK_OPACITY}>
-              {rendered.backFaces.map((glyph, index) => (
-                <path
-                  key={`${glyph.id}-back`}
-                  className="back-face"
-                  data-glyph-index={index}
-                  data-line-index={glyph.lineIndex}
-                  d={glyph.d}
-                  fill={colorForGlyph(glyph, activePalette)}
-                  fillRule="evenodd"
-                />
-              ))}
-            </g>
-            <g className="side-faces" data-depth-x={round(depth.x)} data-depth-y={round(depth.y)}>
-              {rendered.sideFaces.map((face) => (
-                <path
-                  key={face.id}
-                  className="side-face"
-                  data-glyph-index={face.glyphIndex}
-                  d={face.d}
-                  fill={face.fill}
-                  clipPath={face.clipPathId ? `url(#${face.clipPathId})` : undefined}
-                  {...strokeProps}
-                />
-              ))}
-            </g>
-            <g className="front-faces">
-              {rendered.frontFaces.map((glyph, index) => (
-                <path
-                  key={glyph.id}
-                  className="front-face"
-                  data-glyph-index={index}
-                  data-line-index={glyph.lineIndex}
-                  d={glyph.d}
-                  fill={frontColor(activePalette)}
-                  fillRule="evenodd"
-                  {...strokeProps}
-                />
-              ))}
-            </g>
+          <rect
+            x={rendered.viewBox.x1}
+            y={rendered.viewBox.y1}
+            width={rendered.viewBox.x2 - rendered.viewBox.x1}
+            height={rendered.viewBox.y2 - rendered.viewBox.y1}
+            fill={String(drawing.background)}
+          />
+          <g
+            className="extruded-text depth-sorted-faces"
+            data-depth={round(Number(extrusion.depth))}
+            data-depth-scale={round(depthScale)}
+            data-random-depth={Boolean(extrusion.randomDepth)}
+            data-min-depth={round(Number(extrusion.minDepth))}
+            data-max-depth={round(Number(extrusion.maxDepth))}
+            data-camera-x={round(Number(plane.cameraX))}
+            data-camera-y={round(Number(plane.cameraY))}
+            data-camera-z={round(Number(plane.cameraZ))}
+          >
+            {rendered.orderedFaceGroups.map((group) => (
+              <g
+                key={group.id}
+                className="glyph-group"
+                data-glyph-index={group.glyphIndex}
+                data-line-index={group.lineIndex}
+                data-glyph-x-sort={round(group.sortX)}
+                data-glyph-depth-sort={round(group.sortZ)}
+                data-rotate-x={round(group.rotateX)}
+                data-rotate-y={round(group.rotateY)}
+                data-rotate-z={round(group.rotateZ)}
+              >
+                {group.faces.map((face) => (
+                  <path
+                    key={face.id}
+                    className={`${face.kind}-face`}
+                    data-face-kind={face.kind}
+                    data-glyph-index={face.glyphIndex}
+                    data-line-index={face.lineIndex}
+                    data-depth-sort={round(face.sortZ)}
+                    data-face-zone={face.zone}
+                    data-edge-index={face.edgeIndex}
+                    data-segment-index={face.segmentIndex}
+                    data-visibility-score={
+                      face.visibilityScore === undefined
+                        ? undefined
+                        : round(face.visibilityScore)
+                    }
+                    d={face.d}
+                    fill={face.fill}
+                    fillRule={
+                      face.kind === "front" || face.kind === "back"
+                        ? "evenodd"
+                        : undefined
+                    }
+                    opacity={face.opacity}
+                    {...strokeProps}
+                  />
+                ))}
+              </g>
+            ))}
           </g>
         </svg>
       </div>

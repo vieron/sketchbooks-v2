@@ -251,7 +251,11 @@ select {
   position: relative;
   z-index: 10;
   min-height: 100vh;
+  height: 100vh;
   padding: 3.25rem 0.5rem 0.5rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   border-left: 1px solid var(--line);
   background: #ffffff;
 }

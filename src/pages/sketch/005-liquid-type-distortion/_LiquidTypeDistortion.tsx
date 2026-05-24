@@ -1,17 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { button, folder, useControls } from 'leva';
-import { SketchControls } from '../../../components/SketchControls';
-import { nativeNumber } from '../../../controls/nativeNumberPlugin';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { button, folder, useControls } from "leva";
+import { SketchControls } from "../../../components/SketchControls";
+import { nativeNumber } from "../../../controls/nativeNumberPlugin";
 import {
   getFontByValue,
   getFontFamilyById,
   getFontFamilyOptions,
   getFontVariantOptions,
-  geistFonts,
-} from '../../../data/fonts';
-import { downloadSvg } from '../../../utils/svgDownload';
-import { useOpenTypeFont } from '../003-typographic-slicing/_opentype';
-import type { Bounds, OpenTypeCommand, OpenTypeFont, OpenTypeGlyph } from '../003-typographic-slicing/_types';
+} from "../../../data/fonts";
+import { downloadSvg } from "../../../utils/svgDownload";
+import { useOpenTypeFont } from "../003-typographic-slicing/_opentype";
+import type {
+  Bounds,
+  OpenTypeCommand,
+  OpenTypeFont,
+  OpenTypeGlyph,
+} from "../003-typographic-slicing/_types";
 
 type GlyphLayout = {
   glyphs: { id: string; commands: OpenTypeCommand[] }[];
@@ -46,7 +50,12 @@ const FIXED_DETAIL = 420;
 const MAX_SEGMENTS_PER_COMMAND = 520;
 
 function cleanFilePart(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'liquid-type';
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "") || "liquid-type"
+  );
 }
 
 function pathNumber(value: number) {
@@ -66,23 +75,47 @@ function getSegmentCount(length: number, detail: number, minimum = 1) {
   return clamp(Math.ceil(length / step), minimum, MAX_SEGMENTS_PER_COMMAND);
 }
 
-function getLiquidOffset(stageX: number, stageY: number, settings: LiquidSettings) {
+function getLiquidOffset(
+  stageX: number,
+  stageY: number,
+  settings: LiquidSettings,
+) {
   const angle = (settings.waveAngle * Math.PI) / 180;
   const axis = { x: Math.sin(angle), y: Math.cos(angle) };
   const tangent = { x: axis.y, y: -axis.x };
   const centerX = settings.centerX * STAGE.width;
   const centerY = settings.centerY * STAGE.height;
-  const wavePosition = (stageX - centerX) * axis.x + (stageY - centerY) * axis.y;
+  const wavePosition =
+    (stageX - centerX) * axis.x + (stageY - centerY) * axis.y;
   const ratio = 0.5 + wavePosition / STAGE.height;
   const centerRatio = clamp(ratio, 0, 1);
-  const centerWeight = 0.38 + Math.pow(Math.sin(centerRatio * Math.PI), 0.7) * 0.95;
+  const centerWeight =
+    0.38 + Math.pow(Math.sin(centerRatio * Math.PI), 0.7) * 0.95;
   const drag = 0.42;
   const seedPhase = settings.seed * 0.031;
-  const primary = Math.sin(ratio * TAU * settings.frequency + settings.phase + seedPhase);
-  const undertow = Math.sin(ratio * TAU * (settings.frequency * 0.43 + 0.35) - settings.phase * 0.62 + seedPhase * 0.4) * 0.46;
-  const ripple = Math.cos(ratio * TAU * (settings.frequency * 1.7 + 0.8) + settings.phase * 1.2 - seedPhase * 0.25) * 0.18;
-  const waveOffset = (primary + undertow + ripple) * settings.amplitude * DISPLACEMENT_SCALE * centerWeight * drag;
-  const gravityOffset = Math.cos(ratio * TAU * (settings.frequency * 0.55 + 0.3) + settings.phase) *
+  const primary = Math.sin(
+    ratio * TAU * settings.frequency + settings.phase + seedPhase,
+  );
+  const undertow =
+    Math.sin(
+      ratio * TAU * (settings.frequency * 0.43 + 0.35) -
+        settings.phase * 0.62 +
+        seedPhase * 0.4,
+    ) * 0.46;
+  const ripple =
+    Math.cos(
+      ratio * TAU * (settings.frequency * 1.7 + 0.8) +
+        settings.phase * 1.2 -
+        seedPhase * 0.25,
+    ) * 0.18;
+  const waveOffset =
+    (primary + undertow + ripple) *
+    settings.amplitude *
+    DISPLACEMENT_SCALE *
+    centerWeight *
+    drag;
+  const gravityOffset =
+    Math.cos(ratio * TAU * (settings.frequency * 0.55 + 0.3) + settings.phase) *
     settings.pull *
     settings.amplitude *
     DISPLACEMENT_SCALE *
@@ -94,7 +127,12 @@ function getLiquidOffset(stageX: number, stageY: number, settings: LiquidSetting
   };
 }
 
-function getGlyphPathCommands(glyph: OpenTypeGlyph, x: number, y: number, scale: number) {
+function getGlyphPathCommands(
+  glyph: OpenTypeGlyph,
+  x: number,
+  y: number,
+  scale: number,
+) {
   const bounds: Bounds = {
     x1: Infinity,
     y1: Infinity,
@@ -116,33 +154,35 @@ function getGlyphPathCommands(glyph: OpenTypeGlyph, x: number, y: number, scale:
     return { x: px, y: py };
   }
 
-  const commands = (glyph.path?.commands ?? []).map((command): OpenTypeCommand => {
-    if (command.type === 'M' || command.type === 'L') {
-      return { type: command.type, ...point(command.x, command.y) };
-    }
+  const commands = (glyph.path?.commands ?? []).map(
+    (command): OpenTypeCommand => {
+      if (command.type === "M" || command.type === "L") {
+        return { type: command.type, ...point(command.x, command.y) };
+      }
 
-    if (command.type === 'Q') {
-      return {
-        type: command.type,
-        ...point(command.x, command.y),
-        x1: point(command.x1, command.y1).x,
-        y1: point(command.x1, command.y1).y,
-      };
-    }
+      if (command.type === "Q") {
+        return {
+          type: command.type,
+          ...point(command.x, command.y),
+          x1: point(command.x1, command.y1).x,
+          y1: point(command.x1, command.y1).y,
+        };
+      }
 
-    if (command.type === 'C') {
-      return {
-        type: command.type,
-        ...point(command.x, command.y),
-        x1: point(command.x1, command.y1).x,
-        y1: point(command.x1, command.y1).y,
-        x2: point(command.x2, command.y2).x,
-        y2: point(command.x2, command.y2).y,
-      };
-    }
+      if (command.type === "C") {
+        return {
+          type: command.type,
+          ...point(command.x, command.y),
+          x1: point(command.x1, command.y1).x,
+          y1: point(command.x1, command.y1).y,
+          x2: point(command.x2, command.y2).x,
+          y2: point(command.x2, command.y2).y,
+        };
+      }
 
-    return { type: 'Z' };
-  });
+      return { type: "Z" };
+    },
+  );
 
   return {
     commands,
@@ -150,10 +190,16 @@ function getGlyphPathCommands(glyph: OpenTypeGlyph, x: number, y: number, scale:
   };
 }
 
-function getGlyphLayout(font: OpenTypeFont | null, text: string, size: number, tracking: number): GlyphLayout {
-  if (!font) return { glyphs: [], metrics: { x: 0, y: 0, width: 1, height: 1 } };
+function getGlyphLayout(
+  font: OpenTypeFont | null,
+  text: string,
+  size: number,
+  tracking: number,
+): GlyphLayout {
+  if (!font)
+    return { glyphs: [], metrics: { x: 0, y: 0, width: 1, height: 1 } };
 
-  const glyphs = font.stringToGlyphs(text.trim() || ' ');
+  const glyphs = font.stringToGlyphs(text.trim() || " ");
   const scale = size / font.unitsPerEm;
   let cursor = 0;
   let layoutMinX = 0;
@@ -161,7 +207,8 @@ function getGlyphLayout(font: OpenTypeFont | null, text: string, size: number, t
 
   const paths = glyphs.map((glyph, index) => {
     const previousGlyph = glyphs[index - 1];
-    if (previousGlyph && font.getKerningValue) cursor += font.getKerningValue(previousGlyph, glyph) * scale;
+    if (previousGlyph && font.getKerningValue)
+      cursor += font.getKerningValue(previousGlyph, glyph) * scale;
 
     const path = getGlyphPathCommands(glyph, cursor, 0, scale);
 
@@ -187,7 +234,11 @@ function getGlyphLayout(font: OpenTypeFont | null, text: string, size: number, t
     ? {
         x: Math.min(measuredBounds.x1, layoutMinX),
         y: measuredBounds.y1,
-        width: Math.max(Math.max(measuredBounds.x2, cursor) - Math.min(measuredBounds.x1, layoutMinX), 1),
+        width: Math.max(
+          Math.max(measuredBounds.x2, cursor) -
+            Math.min(measuredBounds.x1, layoutMinX),
+          1,
+        ),
         height: Math.max(measuredBounds.y2 - measuredBounds.y1, 1),
       }
     : { x: 0, y: -size, width: Math.max(cursor, 1), height: size || 1 };
@@ -202,10 +253,21 @@ function quadraticPoint(t: number, p0: number, p1: number, p2: number) {
 
 function cubicPoint(t: number, p0: number, p1: number, p2: number, p3: number) {
   const mt = 1 - t;
-  return mt * mt * mt * p0 + 3 * mt * mt * t * p1 + 3 * mt * t * t * p2 + t * t * t * p3;
+  return (
+    mt * mt * mt * p0 +
+    3 * mt * mt * t * p1 +
+    3 * mt * t * t * p2 +
+    t * t * t * p3
+  );
 }
 
-function warpPoint(x: number, y: number, translateX: number, translateY: number, settings: LiquidSettings) {
+function warpPoint(
+  x: number,
+  y: number,
+  translateX: number,
+  translateY: number,
+  settings: LiquidSettings,
+) {
   const stageX = x + translateX;
   const stageY = y + translateY;
   const offset = getLiquidOffset(stageX, stageY, settings);
@@ -223,7 +285,10 @@ function lineToWarpedPoints(
   translateY: number,
   settings: LiquidSettings,
 ) {
-  const segments = getSegmentCount(distance(from.x, from.y, to.x, to.y), settings.detail);
+  const segments = getSegmentCount(
+    distance(from.x, from.y, to.x, to.y),
+    settings.detail,
+  );
   const points: string[] = [];
 
   for (let segment = 1; segment <= segments; segment += 1) {
@@ -252,24 +317,44 @@ function warpGlyphPath(
   let start = { x: 0, y: 0 };
 
   for (const command of commands) {
-    if (command.type === 'M') {
-      const point = warpPoint(command.x, command.y, translateX, translateY, settings);
+    if (command.type === "M") {
+      const point = warpPoint(
+        command.x,
+        command.y,
+        translateX,
+        translateY,
+        settings,
+      );
       pathCommands.push(`M${point.x} ${point.y}`);
       current = { x: command.x, y: command.y };
       start = current;
       continue;
     }
 
-    if (command.type === 'L') {
-      pathCommands.push(...lineToWarpedPoints(current, command, translateX, translateY, settings));
+    if (command.type === "L") {
+      pathCommands.push(
+        ...lineToWarpedPoints(
+          current,
+          command,
+          translateX,
+          translateY,
+          settings,
+        ),
+      );
       current = { x: command.x, y: command.y };
       continue;
     }
 
-    if (command.type === 'Q') {
+    if (command.type === "Q") {
       const chord = distance(current.x, current.y, command.x, command.y);
-      const controlLength = distance(current.x, current.y, command.x1, command.y1) + distance(command.x1, command.y1, command.x, command.y);
-      const segments = getSegmentCount(Math.max(chord, controlLength), settings.detail, 4);
+      const controlLength =
+        distance(current.x, current.y, command.x1, command.y1) +
+        distance(command.x1, command.y1, command.x, command.y);
+      const segments = getSegmentCount(
+        Math.max(chord, controlLength),
+        settings.detail,
+        4,
+      );
 
       for (let segment = 1; segment <= segments; segment += 1) {
         const t = segment / segments;
@@ -287,13 +372,17 @@ function warpGlyphPath(
       continue;
     }
 
-    if (command.type === 'C') {
+    if (command.type === "C") {
       const chord = distance(current.x, current.y, command.x, command.y);
       const controlLength =
         distance(current.x, current.y, command.x1, command.y1) +
         distance(command.x1, command.y1, command.x2, command.y2) +
         distance(command.x2, command.y2, command.x, command.y);
-      const segments = getSegmentCount(Math.max(chord, controlLength), settings.detail, 5);
+      const segments = getSegmentCount(
+        Math.max(chord, controlLength),
+        settings.detail,
+        5,
+      );
 
       for (let segment = 1; segment <= segments; segment += 1) {
         const t = segment / segments;
@@ -311,12 +400,14 @@ function warpGlyphPath(
       continue;
     }
 
-    pathCommands.push(...lineToWarpedPoints(current, start, translateX, translateY, settings));
-    pathCommands.push('Z');
+    pathCommands.push(
+      ...lineToWarpedPoints(current, start, translateX, translateY, settings),
+    );
+    pathCommands.push("Z");
     current = start;
   }
 
-  return pathCommands.join('');
+  return pathCommands.join("");
 }
 
 function splitContours(commands: OpenTypeCommand[]) {
@@ -324,14 +415,14 @@ function splitContours(commands: OpenTypeCommand[]) {
   let contour: OpenTypeCommand[] = [];
 
   for (const command of commands) {
-    if (command.type === 'M' && contour.length > 0) {
+    if (command.type === "M" && contour.length > 0) {
       contours.push(contour);
       contour = [];
     }
 
     contour.push(command);
 
-    if (command.type === 'Z') {
+    if (command.type === "Z") {
       contours.push(contour);
       contour = [];
     }
@@ -344,9 +435,19 @@ function splitContours(commands: OpenTypeCommand[]) {
 
 function getContourPoints(commands: OpenTypeCommand[]) {
   return commands.flatMap((command) => {
-    if (command.type === 'M' || command.type === 'L') return [{ x: command.x, y: command.y }];
-    if (command.type === 'Q') return [{ x: command.x1, y: command.y1 }, { x: command.x, y: command.y }];
-    if (command.type === 'C') return [{ x: command.x1, y: command.y1 }, { x: command.x2, y: command.y2 }, { x: command.x, y: command.y }];
+    if (command.type === "M" || command.type === "L")
+      return [{ x: command.x, y: command.y }];
+    if (command.type === "Q")
+      return [
+        { x: command.x1, y: command.y1 },
+        { x: command.x, y: command.y },
+      ];
+    if (command.type === "C")
+      return [
+        { x: command.x1, y: command.y1 },
+        { x: command.x2, y: command.y2 },
+        { x: command.x, y: command.y },
+      ];
     return [];
   });
 }
@@ -366,7 +467,12 @@ function getContourBounds(commands: OpenTypeCommand[]) {
 }
 
 function boundsContains(outer: Bounds, inner: Bounds) {
-  return outer.x1 <= inner.x1 && outer.y1 <= inner.y1 && outer.x2 >= inner.x2 && outer.y2 >= inner.y2;
+  return (
+    outer.x1 <= inner.x1 &&
+    outer.y1 <= inner.y1 &&
+    outer.x2 >= inner.x2 &&
+    outer.y2 >= inner.y2
+  );
 }
 
 function classifyContours(commands: OpenTypeCommand[]) {
@@ -377,11 +483,19 @@ function classifyContours(commands: OpenTypeCommand[]) {
 
   return contours.map((contour, index) => ({
     ...contour,
-    isHole: contours.some((candidate, candidateIndex) => candidateIndex !== index && boundsContains(candidate.bounds, contour.bounds)),
+    isHole: contours.some(
+      (candidate, candidateIndex) =>
+        candidateIndex !== index &&
+        boundsContains(candidate.bounds, contour.bounds),
+    ),
   }));
 }
 
-function useAnimationPhase(enabled: boolean, speed: number, manualPhase: number) {
+function useAnimationPhase(
+  enabled: boolean,
+  speed: number,
+  manualPhase: number,
+) {
   const [phase, setPhase] = useState(manualPhase);
 
   useEffect(() => {
@@ -408,21 +522,27 @@ function useAnimationPhase(enabled: boolean, speed: number, manualPhase: number)
 
 export default function LiquidTypeDistortion() {
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const defaultFamily = getFontFamilyById('geist');
-  const [selectedFontFamilyId, setSelectedFontFamilyId] = useState(defaultFamily.id);
+  const defaultFamily = getFontFamilyById("humane");
+  const [selectedFontFamilyId, setSelectedFontFamilyId] = useState(
+    defaultFamily.id,
+  );
   const selectedFontFamily = getFontFamilyById(selectedFontFamilyId);
   const [selectedFontValue, setSelectedFontValue] = useState(
-    geistFonts.find((font) => font.variant === 'Black Italic')?.value ?? selectedFontFamily.defaultFont.value,
+    defaultFamily.defaultFont.value,
   );
-  const selectedFont = getFontByValue(selectedFontFamily.fonts, selectedFontValue, selectedFontFamily.defaultFont);
+  const selectedFont = getFontByValue(
+    selectedFontFamily.fonts,
+    selectedFontValue,
+    selectedFontFamily.defaultFont,
+  );
 
   const typography = useControls(
-    'Typography',
+    "Typography",
     {
       fontFamily: {
         value: selectedFontFamily.id,
         options: getFontFamilyOptions(),
-        label: 'family',
+        label: "family",
         onChange: (familyId: string) => {
           const nextFamily = getFontFamilyById(familyId);
           setSelectedFontFamilyId(nextFamily.id);
@@ -432,54 +552,114 @@ export default function LiquidTypeDistortion() {
       fontVariant: {
         value: selectedFont.value,
         options: getFontVariantOptions(selectedFontFamily.fonts),
-        label: 'variant',
+        label: "variant",
         onChange: setSelectedFontValue,
       },
-      text: 'liquid',
+      text: "LIQUID",
       size: nativeNumber({ current: 80, min: 36, max: 360, step: 1 }),
-      tracking: nativeNumber({ current: -6, min: -20, max: 80, step: 0.25 }),
+      tracking: nativeNumber({ current: 0, min: -20, max: 80, step: 0.25 }),
     },
     { collapsed: false },
     [selectedFontFamily.id, selectedFont.value],
   );
 
-  const liquid = useControls('Liquid', {
-    amplitude: { ...nativeNumber({ current: 15, min: 0, max: 90, step: 0.25 }), label: 'amplitude' },
-    frequency: { ...nativeNumber({ current: 2.15, min: 0.1, max: 8, step: 0.05 }), label: 'wave' },
-    waveAngle: { ...nativeNumber({ current: 0, min: -180, max: 180, step: 0.5 }), label: 'angle' },
-    centerX: { ...nativeNumber({ current: 0.5, min: -0.5, max: 1.5, step: 0.01 }), label: 'center x' },
-    centerY: { ...nativeNumber({ current: 0.5, min: -0.5, max: 1.5, step: 0.01 }), label: 'center y' },
-    pull: { ...nativeNumber({ current: 0.8, min: 0, max: 12, step: 0.05 }), label: 'gravity' },
-    slant: { ...nativeNumber({ current: -9, min: -38, max: 38, step: 0.25 }), label: 'slant' },
-    seed: nativeNumber({ current: 77, min: 1, max: 999, step: 1 }),
-  }, { collapsed: false });
+  const liquid = useControls(
+    "Liquid",
+    {
+      amplitude: {
+        ...nativeNumber({ current: 15, min: 0, max: 90, step: 0.25 }),
+        label: "amplitude",
+      },
+      frequency: {
+        ...nativeNumber({ current: 2.15, min: 0.1, max: 8, step: 0.05 }),
+        label: "wave",
+      },
+      waveAngle: {
+        ...nativeNumber({ current: 0, min: -180, max: 180, step: 0.5 }),
+        label: "angle",
+      },
+      centerX: {
+        ...nativeNumber({ current: 0.5, min: -0.5, max: 1.5, step: 0.01 }),
+        label: "center x",
+      },
+      centerY: {
+        ...nativeNumber({ current: 0.5, min: -0.5, max: 1.5, step: 0.01 }),
+        label: "center y",
+      },
+      pull: {
+        ...nativeNumber({ current: 0.8, min: 0, max: 12, step: 0.05 }),
+        label: "gravity",
+      },
+      slant: {
+        ...nativeNumber({ current: -9, min: -38, max: 38, step: 0.25 }),
+        label: "slant",
+      },
+      seed: nativeNumber({ current: 77, min: 1, max: 999, step: 1 }),
+    },
+    { collapsed: false },
+  );
 
-  const motion = useControls('Motion', {
-    animate: { value: true, label: 'animate' },
-    speed: { ...nativeNumber({ current: 1.15, min: 0, max: 7, step: 0.05 }), label: 'speed' },
-    phase: { ...nativeNumber({ current: 0.4, min: -TAU * 8, max: TAU * 8, step: 0.01 }), label: 'phase' },
-  }, { collapsed: false });
+  const motion = useControls(
+    "Motion",
+    {
+      animate: { value: true, label: "animate" },
+      speed: {
+        ...nativeNumber({ current: 1.15, min: 0, max: 7, step: 0.05 }),
+        label: "speed",
+      },
+      phase: {
+        ...nativeNumber({
+          current: 0.4,
+          min: -TAU * 8,
+          max: TAU * 8,
+          step: 0.01,
+        }),
+        label: "phase",
+      },
+    },
+    { collapsed: false },
+  );
 
-  const drawing = useControls('Drawing', {
-    Color: folder({
-      background: '#fbfaf6',
-      ink: '#0c0b09',
-    }, { collapsed: false }),
-  }, { collapsed: false });
+  const drawing = useControls(
+    "Drawing",
+    {
+      Color: folder(
+        {
+          background: "#fbfaf6",
+          ink: "#0c0b09",
+        },
+        { collapsed: false },
+      ),
+    },
+    { collapsed: false },
+  );
 
   useControls({
-    'Download SVG': button(() => {
-      downloadSvg(svgRef.current, `${cleanFilePart(String(typography.text))}-${cleanFilePart(selectedFont.label)}-liquid.svg`);
+    "Download SVG": button(() => {
+      downloadSvg(
+        svgRef.current,
+        `${cleanFilePart(String(typography.text))}-${cleanFilePart(selectedFont.label)}-liquid.svg`,
+      );
     }),
   });
 
-  const phase = useAnimationPhase(Boolean(motion.animate), Number(motion.speed), Number(motion.phase));
+  const phase = useAnimationPhase(
+    Boolean(motion.animate),
+    Number(motion.speed),
+    Number(motion.phase),
+  );
   const { font, error } = useOpenTypeFont(selectedFont.url);
   const numericSize = Number(typography.size) * SIZE_SCALE;
   const numericTracking = Number(typography.tracking) * TRACKING_SCALE;
 
   const glyphLayout = useMemo(
-    () => getGlyphLayout(font, String(typography.text), numericSize, numericTracking),
+    () =>
+      getGlyphLayout(
+        font,
+        String(typography.text),
+        numericSize,
+        numericTracking,
+      ),
     [font, numericSize, numericTracking, typography.text],
   );
 
@@ -513,8 +693,10 @@ export default function LiquidTypeDistortion() {
     phase,
     seed: Number(liquid.seed),
   };
-  const translateX = STAGE.width / 2 - (glyphLayout.metrics.x + glyphLayout.metrics.width / 2);
-  const translateY = STAGE.height / 2 - (glyphLayout.metrics.y + glyphLayout.metrics.height / 2);
+  const translateX =
+    STAGE.width / 2 - (glyphLayout.metrics.x + glyphLayout.metrics.width / 2);
+  const translateY =
+    STAGE.height / 2 - (glyphLayout.metrics.y + glyphLayout.metrics.height / 2);
   const slantTransform = `translate(${STAGE.width / 2} ${STAGE.height / 2}) skewX(${settings.slant}) translate(${-STAGE.width / 2} ${-STAGE.height / 2})`;
   const warpedGlyphs = glyphLayout.glyphs.flatMap((glyph) => {
     const contours = classifyContours(glyph.commands);
@@ -551,10 +733,16 @@ export default function LiquidTypeDistortion() {
           style={{ backgroundColor: String(drawing.background) }}
           shapeRendering="geometricPrecision"
         >
-          <rect width={STAGE.width} height={STAGE.height} fill={String(drawing.background)} />
+          <rect
+            width={STAGE.width}
+            height={STAGE.height}
+            fill={String(drawing.background)}
+          />
 
           <g transform={slantTransform}>
-            {warpedGlyphs.map((glyph) => <path key={glyph.id} d={glyph.d} fill={glyph.fill} />)}
+            {warpedGlyphs.map((glyph) => (
+              <path key={glyph.id} d={glyph.d} fill={glyph.fill} />
+            ))}
           </g>
         </svg>
       </div>

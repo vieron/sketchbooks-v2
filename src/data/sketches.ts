@@ -63,6 +63,15 @@ export const sketches: SketchMeta[] = [
     image: '/images/sketches/svg-type-extrusion.svg',
     medium: 'svg / opentype',
   },
+  {
+    id: 'circle-packed-type',
+    number: '007',
+    title: 'Circle Packed Type',
+    description: 'Greedy largest-empty-circle packing inside OpenType glyph faces.',
+    href: '/sketch/007-circle-packed-type',
+    image: '/images/sketches/circle-packed-type.svg',
+    medium: 'svg / circle packing',
+  },
 ];
 
 export function getSketchById(id: string) {

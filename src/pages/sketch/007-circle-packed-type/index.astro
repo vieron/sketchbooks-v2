@@ -1,0 +1,12 @@
+---
+import SketchLayout from '../../../layouts/SketchLayout.astro';
+import { getSketchById } from '../../../data/sketches';
+import CirclePackedType from './_CirclePackedType';
+
+const sketch = getSketchById('circle-packed-type');
+if (!sketch) throw new Error('Missing sketch metadata');
+---
+
+<SketchLayout sketch={sketch}>
+  <CirclePackedType client:only="react" />
+</SketchLayout>

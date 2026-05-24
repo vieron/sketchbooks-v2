@@ -88,8 +88,8 @@ type SvgScene = {
 };
 
 const loadedSvgFonts = new Map<string, Promise<void>>();
-const DEFAULT_FONT_FAMILY_ID = 'geist';
-const DEFAULT_FONT_VALUE = 'geist-black';
+const DEFAULT_FONT_FAMILY_ID = 'humane';
+const DEFAULT_FONT_VALUE = 'humane-bold';
 const DEFAULT_LINE_LENGTH = 100;
 const FLOW_NEIGHBOR_RADIUS = 2;
 const FLOW_MIN_SCORE = -0.2;

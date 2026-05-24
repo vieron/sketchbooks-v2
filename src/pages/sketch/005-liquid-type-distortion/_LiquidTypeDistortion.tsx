@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { button, folder, useControls } from "leva";
+import { button, useControls } from "leva";
 import { SketchControls } from "../../../components/SketchControls";
+import { colorPalette } from "../../../controls/colorPalettePlugin";
 import { nativeNumber } from "../../../controls/nativeNumberPlugin";
 import {
   getFontByValue,
@@ -8,6 +9,7 @@ import {
   getFontFamilyOptions,
   getFontVariantOptions,
 } from "../../../data/fonts";
+import { getPaletteById, getPaletteToneColors, sketchPalettePresets } from "../../../data/palettes";
 import { downloadSvg } from "../../../utils/svgDownload";
 import { useOpenTypeFont } from "../003-typographic-slicing/_opentype";
 import type {
@@ -48,6 +50,8 @@ const DISPLACEMENT_SCALE = 100;
 const TAU = Math.PI * 2;
 const FIXED_DETAIL = 420;
 const MAX_SEGMENTS_PER_COMMAND = 520;
+const DEFAULT_PALETTE = getPaletteById("pokemon-sgb");
+const DEFAULT_BACKGROUND = "#fbfaf6";
 
 function cleanFilePart(value: string) {
   return (
@@ -623,13 +627,10 @@ export default function LiquidTypeDistortion() {
   const drawing = useControls(
     "Drawing",
     {
-      Color: folder(
-        {
-          background: "#fbfaf6",
-          ink: "#0c0b09",
-        },
-        { collapsed: false },
-      ),
+      palette: colorPalette({
+        value: { source: DEFAULT_PALETTE.id, colors: DEFAULT_PALETTE.colors },
+        palettes: sketchPalettePresets,
+      }),
     },
     { collapsed: false },
   );
@@ -698,6 +699,7 @@ export default function LiquidTypeDistortion() {
   const translateY =
     STAGE.height / 2 - (glyphLayout.metrics.y + glyphLayout.metrics.height / 2);
   const slantTransform = `translate(${STAGE.width / 2} ${STAGE.height / 2}) skewX(${settings.slant}) translate(${-STAGE.width / 2} ${-STAGE.height / 2})`;
+  const paletteTones = getPaletteToneColors(drawing.palette.colors);
   const warpedGlyphs = glyphLayout.glyphs.flatMap((glyph) => {
     const contours = classifyContours(glyph.commands);
     const outerPaths: WarpedPath[] = [];
@@ -707,7 +709,7 @@ export default function LiquidTypeDistortion() {
       const path = {
         id: `${glyph.id}-${index}`,
         d: warpGlyphPath(contour.commands, translateX, translateY, settings),
-        fill: contour.isHole ? String(drawing.background) : String(drawing.ink),
+        fill: contour.isHole ? DEFAULT_BACKGROUND : paletteTones.ink,
       };
 
       if (contour.isHole) {
@@ -730,13 +732,13 @@ export default function LiquidTypeDistortion() {
           overflow="visible"
           role="img"
           aria-label={`${typography.text} rendered as liquid distorted SVG type`}
-          style={{ backgroundColor: String(drawing.background) }}
+          style={{ backgroundColor: DEFAULT_BACKGROUND }}
           shapeRendering="geometricPrecision"
         >
           <rect
             width={STAGE.width}
             height={STAGE.height}
-            fill={String(drawing.background)}
+            fill={DEFAULT_BACKGROUND}
           />
 
           <g transform={slantTransform}>

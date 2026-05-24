@@ -3,7 +3,7 @@ import { button, folder, useControls } from 'leva';
 import { SketchControls } from '../../../components/SketchControls';
 import { colorPalette } from '../../../controls/colorPalettePlugin';
 import { nativeNumber } from '../../../controls/nativeNumberPlugin';
-import { originalPlaygroundPalette, sketchPalettePresets } from '../../../data/palettes';
+import { getPaletteById, sketchPalettePresets } from '../../../data/palettes';
 import {
   getFontByValue,
   getFontFamilyById,
@@ -25,6 +25,7 @@ const STAGE = { width: 30000, height: 15000 };
 const SIZE_SCALE = 100;
 const LETTER_SPACING_SCALE = 15;
 const DISPLACEMENT_SCALE = 100;
+const DEFAULT_PALETTE = getPaletteById('seoul-city');
 
 function cleanFilePart(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'sketch';
@@ -86,7 +87,7 @@ export default function TypographicSlicing() {
         options: { solid: 'solid', palette: 'palette' },
       },
       palette: colorPalette({
-        value: { source: 'original-playground', colors: [...originalPlaygroundPalette] },
+        value: { source: DEFAULT_PALETTE.id, colors: DEFAULT_PALETTE.colors },
         palettes: sketchPalettePresets,
       }),
     }, { collapsed: false }),

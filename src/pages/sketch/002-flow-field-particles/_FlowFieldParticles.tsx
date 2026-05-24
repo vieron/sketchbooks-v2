@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { button, folder, useControls } from 'leva';
+import { button, useControls } from 'leva';
 import { SketchControls } from '../../../components/SketchControls';
+import { colorPalette } from '../../../controls/colorPalettePlugin';
 import { nativeNumber } from '../../../controls/nativeNumberPlugin';
+import { getPaletteById, getPaletteToneColors, sketchPalettePresets } from '../../../data/palettes';
 import { downloadSvg } from '../../../utils/svgDownload';
 
 type Particle = {
@@ -42,6 +44,7 @@ type SvgScene = {
 };
 
 const TAU = Math.PI * 2;
+const DEFAULT_PALETTE = getPaletteById('ice-cream-gb');
 
 function createRandom(seed: number): RandomSource {
   let state = seed >>> 0;
@@ -217,15 +220,16 @@ export default function FlowFieldParticles() {
     strokeWeight: { ...nativeNumber({ current: 1, min: 0.2, max: 4, step: 0.1 }), label: 'weight' },
     trailAlpha: { ...nativeNumber({ current: 40 / 255, min: 0.01, max: 1, step: 0.001 }), label: 'alpha' },
     fadeAlpha: { ...nativeNumber({ current: 0, min: 0, max: 0.18, step: 0.001 }), label: 'fade' },
-    Color: folder({
-      background: '#ffffff',
-      strokeColor: '#323232',
-    }, { collapsed: false }),
+    palette: colorPalette({
+      value: { source: DEFAULT_PALETTE.id, colors: DEFAULT_PALETTE.colors },
+      palettes: sketchPalettePresets,
+    }),
   }, { collapsed: false });
   useControls({
     'Download SVG': button(() => saveSvg(svgRef.current)),
   });
 
+  const paletteTones = getPaletteToneColors(drawing.palette.colors);
   const settings = useMemo<FlowSettings>(() => ({
     particleCount: Number(field.particleCount),
     noiseScale: Number(field.noiseScale),
@@ -236,10 +240,10 @@ export default function FlowFieldParticles() {
     trailAlpha: Number(drawing.trailAlpha),
     fadeAlpha: Number(drawing.fadeAlpha),
     offscreen: Number(field.offscreen),
-    background: String(drawing.background),
-    strokeColor: String(drawing.strokeColor),
+    background: '#ffffff',
+    strokeColor: paletteTones.ink,
     seed: Number(field.seed),
-  }), [animation, drawing, field]);
+  }), [animation, drawing, field, paletteTones.ink]);
 
   const scene = useMemo(
     () => createSvgScene(size.width, size.height, settings),

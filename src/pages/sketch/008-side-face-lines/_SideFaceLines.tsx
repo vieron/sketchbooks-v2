@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as opentype from "opentype.js";
 import { button, folder, useControls } from "leva";
 import { SketchControls } from "../../../components/SketchControls";
-import { colorPalette } from "../../../controls/colorPalettePlugin";
 import { nativeNumber } from "../../../controls/nativeNumberPlugin";
 import {
   getFontByValue,
@@ -10,7 +9,6 @@ import {
   getFontFamilyOptions,
   getFontVariantOptions,
 } from "../../../data/fonts";
-import { getPaletteById, getPaletteToneColors, sketchPalettePresets } from "../../../data/palettes";
 import { downloadSvg } from "../../../utils/svgDownload";
 import type {
   Bounds,
@@ -159,10 +157,6 @@ type PlaneOptions = {
   minDepth: number;
   maxDepth: number;
   depthScale: number;
-  perspective: number;
-  cameraX: number;
-  cameraY: number;
-  cameraZ: number;
 };
 
 type RenderOptions = {
@@ -177,14 +171,20 @@ type RenderOptions = {
   palette: string[];
 };
 
-const DEFAULT_TEXT = "EXTRUDE\nMY TYPE";
+const DEFAULT_TEXT = "SIDE\nLINES";
 const DEFAULT_FONT_FAMILY_ID = "geist";
 const DEFAULT_FONT_VALUE = "geist-black";
-const DEFAULT_PALETTE_PRESET = getPaletteById("signal");
-const DEFAULT_PALETTE = DEFAULT_PALETTE_PRESET.colors;
-const DEFAULT_TONES = getPaletteToneColors(DEFAULT_PALETTE);
-const FRONT_COLOR = DEFAULT_TONES.ink;
-const BACK_COLOR = DEFAULT_PALETTE[3] ?? DEFAULT_TONES.paper;
+const DEFAULT_BACKGROUND_COLOR = "#ffffff";
+const DEFAULT_LINE_COLOR = "#0073ff";
+const DEFAULT_FRONT_FACE_COLOR = "#ffffff";
+const DEFAULT_PALETTE = [
+  DEFAULT_LINE_COLOR,
+  "#0053ff",
+  "#ff3b30",
+  DEFAULT_FRONT_FACE_COLOR,
+];
+const FRONT_COLOR = DEFAULT_LINE_COLOR;
+const BACK_COLOR = DEFAULT_FRONT_FACE_COLOR;
 const BACK_OPACITY = 0.32;
 const VIEWBOX_PADDING = 42;
 const MAX_EXTRUSION_DEPTH = 240;
@@ -193,6 +193,7 @@ const DEFAULT_FONT_SIZE = 39;
 const DEFAULT_FLATTENING_RESOLUTION = 20;
 const DEFAULT_POSTER_OFFSET_X = -56;
 const DEFAULT_POSTER_OFFSET_Y = -16;
+const DEFAULT_LINE_SPACING = 0.75;
 const FACE_RUN_MIN_DOT = Math.cos(Math.PI / 6);
 const MAX_LETTER_ROTATION_DEGREES = 16;
 const MAX_LETTER_AXIS_TILT_DEGREES = 14;
@@ -687,6 +688,71 @@ function polygonToPath(points: Point[]) {
   return `M${points.map(pointToPath).join("L")}Z`;
 }
 
+function segmentToPath(a: Point, b: Point) {
+  return `M${pointToPath(a)}L${pointToPath(b)}`;
+}
+
+function polylineLength(points: Point[]) {
+  return points.slice(0, -1).reduce((length, point, index) => {
+    const next = points[index + 1] ?? point;
+    return length + Math.hypot(next.x - point.x, next.y - point.y);
+  }, 0);
+}
+
+function pointOnPolyline(points: Point[], t: number) {
+  if (points.length === 0) return null;
+  if (points.length === 1) return points[0];
+
+  const lengths = points.slice(0, -1).map((point, index) => {
+    const next = points[index + 1] ?? point;
+    return Math.hypot(next.x - point.x, next.y - point.y);
+  });
+  const totalLength = lengths.reduce((sum, length) => sum + length, 0);
+  if (totalLength <= 0.001) return points[0];
+
+  let target = clamp(t, 0, 1) * totalLength;
+  for (let index = 0; index < lengths.length; index += 1) {
+    const length = lengths[index] ?? 0;
+    const point = points[index];
+    const next = points[index + 1];
+    if (!point || !next) continue;
+    if (target <= length) return lerpPoint(point, next, target / length);
+    target -= length;
+  }
+
+  return points[points.length - 1] ?? null;
+}
+
+function sideFaceLinePaths(
+  polygon: Point[],
+  lineSpacing: number,
+) {
+  const half = Math.floor(polygon.length / 2);
+  if (polygon.length < 4 || polygon.length % 2 !== 0 || half < 2) return [];
+
+  const front = polygon.slice(0, half);
+  const back = polygon.slice(half).reverse();
+  const paths: string[] = [];
+  const spacing = Math.max(0.25, Number(lineSpacing));
+  const faceLength = (polylineLength(front) + polylineLength(back)) / 2;
+
+  const interiorLineCount =
+    faceLength > 0.001
+      ? clamp(Math.max(1, Math.floor(faceLength / spacing) + 1), 1, 240)
+      : 0;
+  const interiorSpan = Math.max(0, (interiorLineCount - 1) * spacing);
+  const startOffset = Math.max(0, (faceLength - interiorSpan) / 2);
+  for (let index = 0; index < interiorLineCount; index += 1) {
+    const t = clamp((startOffset + index * spacing) / faceLength, 0, 1);
+    const frontPoint = pointOnPolyline(front, t);
+    const backPoint = pointOnPolyline(back, t);
+    if (frontPoint && backPoint)
+      paths.push(segmentToPath(frontPoint, backPoint));
+  }
+
+  return paths.filter(Boolean);
+}
+
 function contourSignedArea(points: Point[]) {
   return (
     points.reduce((area, point, index) => {
@@ -899,31 +965,8 @@ function normalized3D(point: Point3D): Point3D {
   };
 }
 
-function createProjector(bounds: Bounds, options: PlaneOptions) {
-  const width = Math.max(MIN_BOUNDS_SIZE, bounds.x2 - bounds.x1);
-  const height = Math.max(MIN_BOUNDS_SIZE, bounds.y2 - bounds.y1);
-  const size = Math.max(width, height);
-  const centerX = (bounds.x1 + bounds.x2) / 2;
-  const centerY = (bounds.y1 + bounds.y2) / 2;
-  const cameraX = centerX + options.cameraX * size;
-  const cameraY = centerY + options.cameraY * size;
-  const perspective = Math.max(0, options.perspective);
-  const cameraDistance = Math.max(
-    size * 0.35,
-    size * Math.max(0.8, options.cameraZ),
-  );
-
-  return (point: Point3D): Point => {
-    const denominator = Math.max(
-      cameraDistance * 0.18,
-      cameraDistance + point.z * perspective,
-    );
-    const scale = cameraDistance / denominator;
-    return {
-      x: cameraX + (point.x - cameraX) * scale,
-      y: cameraY + (point.y - cameraY) * scale,
-    };
-  };
+function createProjector() {
+  return (point: Point3D): Point => ({ x: point.x, y: point.y });
 }
 
 function includePathData(bounds: Bounds, d: string) {
@@ -1254,11 +1297,17 @@ function keepOwnFrontFaceOnTop(faces: RenderFace[]) {
   return result;
 }
 
+function compareCharacterStack(left: RenderFaceGroup, right: RenderFaceGroup) {
+  // SVG has no z-axis; later groups paint on top. Drawing left-to-right makes
+  // right-side characters consistently cover characters to their left.
+  return left.sortX - right.sortX || left.glyphIndex - right.glyphIndex;
+}
+
 export function renderSvg(
   layout: TextLayout,
   options: RenderOptions,
 ): RenderedSvg {
-  const projector = createProjector(layout.bounds, options.plane);
+  const projector = createProjector();
   const sideFaces: SideFace[] = [];
   const frontFaces: GlyphLayout[] = [];
   const backFaces: GlyphLayout[] = [];
@@ -1450,12 +1499,7 @@ export function renderSvg(
       right.sortKey - left.sortKey ||
       left.glyphIndex - right.glyphIndex,
   );
-  const orderedFaceGroups = faceGroups.sort(
-    (left, right) =>
-      right.sortX - left.sortX ||
-      left.sortZ - right.sortZ ||
-      left.glyphIndex - right.glyphIndex,
-  );
+  const orderedFaceGroups = faceGroups.sort(compareCharacterStack);
   const orderedFaces = orderedFaceGroups.flatMap((group) => group.faces);
   const outputSideFaces = options.showSides ? sideFaces : [];
   const outputFrontFaces = options.showFront ? frontFaces : [];
@@ -1514,7 +1558,7 @@ function useOpenTypeFont(url: string) {
   return { font, error };
 }
 
-export default function SvgTypeExtrusion() {
+export default function SideFaceLines() {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const defaultFamily = getFontFamilyById(DEFAULT_FONT_FAMILY_ID);
   const defaultFont = getFontByValue(
@@ -1531,6 +1575,13 @@ export default function SvgTypeExtrusion() {
     selectedFontFamily.fonts,
     selectedFontValue,
     selectedFontFamily.defaultFont,
+  );
+  const [backgroundColor, setBackgroundColor] = useState(
+    DEFAULT_BACKGROUND_COLOR,
+  );
+  const [lineColor, setLineColor] = useState(DEFAULT_LINE_COLOR);
+  const [frontFaceColor, setFrontFaceColor] = useState(
+    DEFAULT_FRONT_FACE_COLOR,
   );
 
   const typography = useControls(
@@ -1590,11 +1641,11 @@ export default function SvgTypeExtrusion() {
         label: "seed",
       },
       baseRotateX: {
-        ...nativeNumber({ current: -18, min: -75, max: 75, step: 1 }),
+        ...nativeNumber({ current: -12, min: -75, max: 75, step: 1 }),
         label: "base x",
       },
       baseRotateY: {
-        ...nativeNumber({ current: 32, min: -75, max: 75, step: 1 }),
+        ...nativeNumber({ current: -12, min: -75, max: 75, step: 1 }),
         label: "base y",
       },
       baseRotateZ: {
@@ -1602,32 +1653,16 @@ export default function SvgTypeExtrusion() {
         label: "base z",
       },
       randomRotateX: {
-        ...nativeNumber({ current: 16, min: 0, max: 90, step: 1 }),
+        ...nativeNumber({ current: 0, min: 0, max: 90, step: 1 }),
         label: "random x",
       },
       randomRotateY: {
-        ...nativeNumber({ current: 12, min: 0, max: 90, step: 1 }),
+        ...nativeNumber({ current: 0, min: 0, max: 90, step: 1 }),
         label: "random y",
       },
       randomRotateZ: {
-        ...nativeNumber({ current: 7, min: 0, max: 90, step: 1 }),
+        ...nativeNumber({ current: 0, min: 0, max: 90, step: 1 }),
         label: "random z",
-      },
-      perspective: {
-        ...nativeNumber({ current: 1, min: 0, max: 2.5, step: 0.05 }),
-        label: "perspective",
-      },
-      cameraX: {
-        ...nativeNumber({ current: -0.15, min: -2, max: 2, step: 0.05 }),
-        label: "camera x",
-      },
-      cameraY: {
-        ...nativeNumber({ current: -0.05, min: -2, max: 2, step: 0.05 }),
-        label: "camera y",
-      },
-      cameraZ: {
-        ...nativeNumber({ current: 9, min: 0.8, max: 9, step: 0.1 }),
-        label: "camera z",
       },
     },
     { collapsed: false },
@@ -1668,50 +1703,54 @@ export default function SvgTypeExtrusion() {
     { collapsed: false },
   );
 
-  const [drawing, setDrawing] = useControls(
+  const drawing = useControls(
     "Drawing",
-    () => ({
-      showFront: { value: true, label: "front face" },
-      showSides: { value: true, label: "side faces" },
-      showBack: { value: false, label: "back face" },
-      randomizeColors: { value: false, label: "glyph variation" },
-      faceBorders: { value: true, label: "stroke" },
-      borderColor: "#000000",
-      borderWidth: {
-        ...nativeNumber({ current: 1.5, min: 0.25, max: 12, step: 0.25 }),
-        label: "border width",
+    {
+      lineWeight: {
+        ...nativeNumber({ current: 0.25, min: 0.25, max: 18, step: 0.25 }),
+        label: "line weight",
       },
+      spacing: {
+        ...nativeNumber({
+          current: DEFAULT_LINE_SPACING,
+          min: 0.75,
+          max: 24,
+          step: 0.25,
+        }),
+        label: "spacing",
+      },
+      frontFace: { value: true, label: "front face" },
       Color: folder(
         {
-          background: "#ffffff",
-          sidePalette: colorPalette({
-            value: { source: DEFAULT_PALETTE_PRESET.id, colors: DEFAULT_PALETTE },
-            palettes: sketchPalettePresets,
-          }),
+          background: {
+            value: DEFAULT_BACKGROUND_COLOR,
+            label: "background",
+            onChange: (value: string) => setBackgroundColor(String(value)),
+          },
+          lineColor: {
+            value: DEFAULT_LINE_COLOR,
+            label: "line color",
+            onChange: (value: string) => setLineColor(String(value)),
+          },
+          frontColor: {
+            value: DEFAULT_FRONT_FACE_COLOR,
+            label: "front color",
+            onChange: (value: string) => setFrontFaceColor(String(value)),
+          },
         },
         { collapsed: false },
       ),
-    }),
+    },
     { collapsed: false },
   );
 
   useControls({
     "Download SVG": button(() =>
-      downloadSvg(svgRef.current, "extruded-type.svg", {
+      downloadSvg(svgRef.current, "side-face-lines.svg", {
         horizontalPaddingRatio: 0,
       }),
     ),
   });
-
-  useEffect(() => {
-    setDrawing({
-      sidePalette: {
-        source: DEFAULT_PALETTE_PRESET.id,
-        colors: DEFAULT_PALETTE,
-        slots: DEFAULT_PALETTE.map((color) => ({ color, enabled: true })),
-      },
-    });
-  }, [setDrawing]);
 
   const { font, error } = useOpenTypeFont(selectedFont.url);
   const inputText = String(typography.text);
@@ -1736,10 +1775,6 @@ export default function SvgTypeExtrusion() {
     typography.letterSpacing,
     typography.lineHeight,
   ]);
-  const activePalette = drawing.sidePalette.colors?.length
-    ? drawing.sidePalette.colors
-    : DEFAULT_PALETTE;
-
   const rendered = useMemo(() => {
     if (!layout) return null;
     const depthScale = layout.fontSize / DEFAULT_FONT_SIZE;
@@ -1757,26 +1792,18 @@ export default function SvgTypeExtrusion() {
         minDepth: Number(extrusion.minDepth),
         maxDepth: Number(extrusion.maxDepth),
         depthScale,
-        perspective: Number(plane.perspective),
-        cameraX: Number(plane.cameraX),
-        cameraY: Number(plane.cameraY),
-        cameraZ: Number(plane.cameraZ),
       },
       resolution: DEFAULT_FLATTENING_RESOLUTION,
-      showFront: Boolean(drawing.showFront),
-      showSides: Boolean(drawing.showSides),
-      showBack: Boolean(drawing.showBack),
-      visibleSurfaceOnly: true,
+      showFront: Boolean(drawing.frontFace),
+      showSides: true,
+      showBack: false,
+      visibleSurfaceOnly: false,
       renderInnerFaces: true,
-      randomizeColors: Boolean(drawing.randomizeColors),
-      palette: activePalette,
+      randomizeColors: false,
+      palette: DEFAULT_PALETTE,
     });
   }, [
-    activePalette,
-    drawing.randomizeColors,
-    drawing.showBack,
-    drawing.showFront,
-    drawing.showSides,
+    drawing.frontFace,
     extrusion.depth,
     extrusion.maxDepth,
     extrusion.minDepth,
@@ -1785,10 +1812,6 @@ export default function SvgTypeExtrusion() {
     plane.baseRotateX,
     plane.baseRotateY,
     plane.baseRotateZ,
-    plane.cameraX,
-    plane.cameraY,
-    plane.cameraZ,
-    plane.perspective,
     plane.randomRotateX,
     plane.randomRotateY,
     plane.randomRotateZ,
@@ -1814,26 +1837,24 @@ export default function SvgTypeExtrusion() {
   }
 
   const depthScale = layout.fontSize / DEFAULT_FONT_SIZE;
-  const strokeProps = drawing.faceBorders
-    ? {
-        stroke: String(drawing.borderColor),
-        strokeWidth: Number(drawing.borderWidth),
-        strokeLinejoin: "round" as const,
-        strokeLinecap: "round" as const,
-        vectorEffect: "non-scaling-stroke" as const,
-      }
-    : {};
+  const lineStrokeProps = {
+    strokeWidth: Number(drawing.lineWeight),
+    strokeLinejoin: "round" as const,
+    strokeLinecap: "round" as const,
+    vectorEffect: "non-scaling-stroke" as const,
+  };
+  const lineSpacing = Number(drawing.spacing);
 
   return (
-    <section className="sketch-workbench svg-type-extrusion">
+    <section className="sketch-workbench side-face-lines">
       <div className="sketch-stage extrusion-stage">
         <svg
           ref={svgRef}
           className="type-svg extrusion-svg"
           viewBox={boundsToViewBox(rendered.viewBox)}
           role="img"
-          aria-label={`${inputText} rendered as SVG extruded typography`}
-          style={{ backgroundColor: String(drawing.background) }}
+          aria-label={`${inputText} rendered as side-face line extrusion`}
+          style={{ backgroundColor }}
           shapeRendering="geometricPrecision"
         >
           {rendered.glyphClips.length > 0 && (
@@ -1854,7 +1875,7 @@ export default function SvgTypeExtrusion() {
             y={rendered.viewBox.y1}
             width={rendered.viewBox.x2 - rendered.viewBox.x1}
             height={rendered.viewBox.y2 - rendered.viewBox.y1}
-            fill={String(drawing.background)}
+            fill={backgroundColor}
           />
           <g
             className="extruded-text depth-sorted-faces"
@@ -1863,9 +1884,6 @@ export default function SvgTypeExtrusion() {
             data-random-depth={Boolean(extrusion.randomDepth)}
             data-min-depth={round(Number(extrusion.minDepth))}
             data-max-depth={round(Number(extrusion.maxDepth))}
-            data-camera-x={round(Number(plane.cameraX))}
-            data-camera-y={round(Number(plane.cameraY))}
-            data-camera-z={round(Number(plane.cameraZ))}
           >
             {rendered.orderedFaceGroups.map((group) => (
               <g
@@ -1880,31 +1898,51 @@ export default function SvgTypeExtrusion() {
                 data-rotate-z={round(group.rotateZ)}
               >
                 {group.faces.map((face) => (
-                  <path
-                    key={face.id}
-                    className={`${face.kind}-face`}
-                    data-face-kind={face.kind}
-                    data-glyph-index={face.glyphIndex}
-                    data-line-index={face.lineIndex}
-                    data-depth-sort={round(face.sortZ)}
-                    data-face-zone={face.zone}
-                    data-edge-index={face.edgeIndex}
-                    data-segment-index={face.segmentIndex}
-                    data-visibility-score={
-                      face.visibilityScore === undefined
-                        ? undefined
-                        : round(face.visibilityScore)
-                    }
-                    d={face.d}
-                    fill={face.fill}
-                    fillRule={
-                      face.kind === "front" || face.kind === "back"
-                        ? "evenodd"
-                        : undefined
-                    }
-                    opacity={face.opacity}
-                    {...strokeProps}
-                  />
+                  face.kind === "front" ? (
+                    <path
+                      key={face.id}
+                      className="front-face"
+                      data-face-kind={face.kind}
+                      data-glyph-index={face.glyphIndex}
+                      data-line-index={face.lineIndex}
+                      data-depth-sort={round(face.sortZ)}
+                      d={face.d}
+                      fill={frontFaceColor}
+                      fillRule="evenodd"
+                      stroke="none"
+                    />
+                  ) : (
+                    <g
+                      key={face.id}
+                      className="side-face-lines"
+                      data-face-kind={face.kind}
+                      data-glyph-index={face.glyphIndex}
+                      data-line-index={face.lineIndex}
+                      data-depth-sort={round(face.sortZ)}
+                      data-face-zone={face.zone}
+                      data-edge-index={face.edgeIndex}
+                      data-segment-index={face.segmentIndex}
+                      data-visibility-score={
+                        face.visibilityScore === undefined
+                          ? undefined
+                          : round(face.visibilityScore)
+                      }
+                      fill="none"
+                      stroke={lineColor}
+                      {...lineStrokeProps}
+                    >
+                      {sideFaceLinePaths(
+                        face.polygons[0] ?? [],
+                        lineSpacing,
+                      ).map((path, pathIndex) => (
+                      <path
+                        key={`${face.id}-line-${pathIndex}`}
+                        className="side-face-line"
+                        d={path}
+                      />
+                      ))}
+                    </g>
+                  )
                 ))}
               </g>
             ))}

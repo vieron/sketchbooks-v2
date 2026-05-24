@@ -1,12 +1,12 @@
 ---
 import SketchLayout from '../../../layouts/SketchLayout.astro';
 import { getSketchById } from '../../../data/sketches';
-import CirclePackedType from './_CirclePackedType';
+import SideFaceLines from './_SideFaceLines';
 
-const sketch = getSketchById('circle-packed-type');
+const sketch = getSketchById('side-face-lines');
 if (!sketch) throw new Error('Missing sketch metadata');
 ---
 
 <SketchLayout sketch={sketch}>
-  <CirclePackedType client:only="react" />
+  <SideFaceLines client:only="react" />
 </SketchLayout>

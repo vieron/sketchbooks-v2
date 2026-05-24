@@ -4,7 +4,7 @@ import { createHobbyBezier } from 'hobby-curve';
 import { SketchControls } from '../../../components/SketchControls';
 import { colorPalette } from '../../../controls/colorPalettePlugin';
 import { nativeNumber } from '../../../controls/nativeNumberPlugin';
-import { originalPlaygroundPalette, sketchPalettePresets } from '../../../data/palettes';
+import { getPaletteById, sketchPalettePresets } from '../../../data/palettes';
 import { downloadSvg } from '../../../utils/svgDownload';
 import {
   getFontByValue,
@@ -88,9 +88,10 @@ type SvgScene = {
 };
 
 const loadedSvgFonts = new Map<string, Promise<void>>();
-const DEFAULT_FONT_FAMILY_ID = 'humane';
-const DEFAULT_FONT_VALUE = 'humane-bold';
+const DEFAULT_FONT_FAMILY_ID = 'geist';
+const DEFAULT_FONT_VALUE = 'geist-black';
 const DEFAULT_LINE_LENGTH = 100;
+const DEFAULT_PALETTE = getPaletteById('signal');
 const FLOW_NEIGHBOR_RADIUS = 2;
 const FLOW_MIN_SCORE = -0.2;
 
@@ -672,27 +673,37 @@ export default function HobbyCurvesFilledType({ textLayout = 'text' }: HobbyCurv
   const points = useControls('Points', {
     radius: nativeNumber({ current: 9, min: 2, max: 52, step: 1 }),
     grouping: {
-      value: 'horizontal',
+      value: 'flow',
       options: ['horizontal', 'vertical', 'diagonal', 'flow'],
     },
     pointsPerLine: { ...nativeNumber({ current: DEFAULT_LINE_LENGTH, min: 2, max: 160, step: 1 }), label: 'line length' },
   }, { collapsed: false });
   const lines = useControls('Lines', {
     lineTension: { ...nativeNumber({ current: 0.85, min: 0.1, max: 1, step: 0.05 }), label: 'tension' },
-    lineWeight: { ...nativeNumber({ current: 9, min: 0.5, max: 70, step: 0.5 }), label: 'weight' },
-    strokeWidth: { ...nativeNumber({ current: 0.8, min: 0, max: 30, step: 0.2 }), label: 'outline' },
+    lineWeight: { ...nativeNumber({ current: 28, min: 0.5, max: 70, step: 0.5 }), label: 'weight' },
+    strokeWidth: { ...nativeNumber({ current: 1.6, min: 0, max: 30, step: 0.2 }), label: 'outline' },
   }, { collapsed: false });
-  const colors = useControls('Color', {
+  const [colors, setColors] = useControls('Color', () => ({
     background: '#ffffff',
-    strokeColor: '#ffffff',
+    strokeColor: '#000000',
     palette: colorPalette({
-      value: { source: 'original-playground', colors: [...originalPlaygroundPalette] },
+      value: { source: DEFAULT_PALETTE.id, colors: DEFAULT_PALETTE.colors },
       palettes: sketchPalettePresets,
     }),
-  }, { collapsed: false });
+  }), { collapsed: false });
   useControls({
     'Download SVG': button(() => saveSvg(svgRef.current)),
   });
+
+  useEffect(() => {
+    setColors({
+      palette: {
+        source: DEFAULT_PALETTE.id,
+        colors: DEFAULT_PALETTE.colors,
+        slots: DEFAULT_PALETTE.colors.map((color) => ({ color, enabled: true })),
+      },
+    });
+  }, [setColors]);
 
   useEffect(() => {
     let cancelled = false;

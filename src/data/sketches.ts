@@ -6,6 +6,7 @@ export type SketchMeta = {
   href: string;
   image: string;
   medium: string;
+  visible?: boolean;
 };
 
 export const sketches: SketchMeta[] = [
@@ -71,6 +72,7 @@ export const sketches: SketchMeta[] = [
     href: '/sketch/008-side-face-lines',
     image: '/images/sketches/side-face-lines.svg',
     medium: 'svg / line extrusion',
+    visible: false,
   },
   {
     id: 'glyph-text-fill',
@@ -82,6 +84,8 @@ export const sketches: SketchMeta[] = [
     medium: 'svg / glyph fill',
   },
 ];
+
+export const homeSketches = sketches.filter((sketch) => sketch.visible !== false);
 
 export function getSketchById(id: string) {
   return sketches.find((sketch) => sketch.id === id);

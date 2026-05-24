@@ -37,6 +37,12 @@ type FilledGlyph = {
   lines: GlyphFillLine[];
 };
 
+type TextTokenBounds = {
+  text: string;
+  x: number;
+  width: number;
+};
+
 type GlyphPlacement = {
   glyph: OpenTypeGlyph;
   x: number;
@@ -46,6 +52,7 @@ const STAGE = { width: 1800, height: 1200 };
 const MAIN_SIZE_SCALE = 4.8;
 const TRACKING_SCALE = 3;
 const CURVE_STEPS = 10;
+const STAGE_MARGIN = 70;
 const EDITORIAL_HIGHLIGHTER_PALETTE = {
   id: 'editorial-highlighter',
   label: 'Editorial Highlighter',
@@ -54,7 +61,7 @@ const EDITORIAL_HIGHLIGHTER_PALETTE = {
 const MARKER_PALETTES = [EDITORIAL_HIGHLIGHTER_PALETTE, ...sketchPalettePresets];
 const DEFAULT_WORDS = 'GORP BARBIE COTTAGE DARKROOM TECH NORM CLUTTER ANGEL ROYAL HOBI CABIN BALLET CRAFT FAIRY ROBOT DREAM WEIRD SPACE CLOWN';
 
-const defaultOuterFont = thunderFonts.find((font) => font.variant === 'Black LC') ?? thunderFonts[thunderFonts.length - 1];
+const defaultOuterFont = thunderFonts.find((font) => font.variant === 'Extra Bold LC') ?? thunderFonts[6];
 const defaultInnerFont = geistFonts.find((font) => font.variant === 'Regular') ?? geistFonts[6];
 
 function cleanFilePart(value: string) {
@@ -100,10 +107,10 @@ function measureTextWidth(font: OpenTypeFont, value: string, size: number, track
   return Math.max(width, 0);
 }
 
-function buildTextPath(font: OpenTypeFont, value: string, size: number, tracking = 0) {
+function buildTextPath(font: OpenTypeFont, value: string, size: number, tracking = 0, originX = 0) {
   const glyphs = font.stringToGlyphs(value);
   const scale = size / font.unitsPerEm;
-  let cursor = 0;
+  let cursor = originX;
   const pieces: string[] = [];
 
   glyphs.forEach((glyph, index) => {
@@ -117,7 +124,46 @@ function buildTextPath(font: OpenTypeFont, value: string, size: number, tracking
 
   return {
     d: pieces.join(''),
-    width: Math.max(cursor, 1),
+    width: Math.max(cursor - originX, 1),
+  };
+}
+
+function buildJustifiedTextPath(font: OpenTypeFont, value: string, size: number, tracking: number, targetWidth: number) {
+  const tokens = value.match(/\S+/g) ?? [];
+  if (!tokens.length) return { d: '', width: 0, tokens: [] as TextTokenBounds[] };
+
+  const naturalWidth = measureTextWidth(font, value, size, tracking);
+  const extraWidth = Math.max(0, targetWidth - naturalWidth);
+  const gapCount = Math.max(0, tokens.length - 1);
+  const wordGap = measureTextWidth(font, ' ', size, tracking) + tracking * 2;
+  const extraWordGap = gapCount > 0 ? extraWidth / gapCount : 0;
+  const singleTokenTracking = gapCount === 0 && tokens[0].length > 1
+    ? tracking + extraWidth / (tokens[0].length - 1)
+    : tracking;
+  let cursor = 0;
+  const tokenBounds: TextTokenBounds[] = [];
+  const pieces: string[] = [];
+
+  tokens.forEach((token, index) => {
+    const tokenTracking = gapCount === 0 ? singleTokenTracking : tracking;
+    const tokenPath = buildTextPath(font, token, size, tokenTracking, cursor);
+
+    if (tokenPath.d) pieces.push(tokenPath.d);
+
+    tokenBounds.push({
+      text: token,
+      x: cursor,
+      width: tokenPath.width,
+    });
+
+    cursor += tokenPath.width;
+    if (index < tokens.length - 1) cursor += wordGap + extraWordGap;
+  });
+
+  return {
+    d: pieces.join(''),
+    width: Math.max(cursor, naturalWidth),
+    tokens: tokenBounds,
   };
 }
 
@@ -272,30 +318,23 @@ function makeLineText(font: OpenTypeFont, words: string[], targetWidth: number, 
 }
 
 function createWordMarker(
-  font: OpenTypeFont,
-  text: string,
+  tokens: TextTokenBounds[],
   seed: number,
   x: number,
   baseline: number,
   size: number,
-  tracking: number,
   chance: number,
   colors: string[],
 ) {
   const roll = ((seed * 9301 + 49297) % 233280) / 233280;
   if (roll > chance) return null;
 
-  const tokens = [...text.matchAll(/\S+/g)].filter((token) => token[0].length >= 3);
-  if (!tokens.length) return null;
+  const markerTokens = tokens.filter((token) => token.text.length >= 3);
+  if (!markerTokens.length) return null;
 
-  const token = tokens[seed % tokens.length];
-  const tokenText = token[0];
-  const startIndex = token.index ?? 0;
-  const endIndex = startIndex + tokenText.length;
-  const prefixWidth = measureTextWidth(font, text.slice(0, startIndex), size, tracking);
-  const endWidth = measureTextWidth(font, text.slice(0, endIndex), size, tracking);
-  const markerX = x + prefixWidth;
-  const markerWidth = Math.max(0, endWidth - prefixWidth);
+  const token = markerTokens[seed % markerTokens.length];
+  const markerX = x + token.x;
+  const markerWidth = token.width;
 
   if (markerWidth < size * 0.45) return null;
 
@@ -339,7 +378,7 @@ export default function GlyphTextFill() {
         label: 'variant',
         onChange: setOuterFontValue,
       },
-      text: 'CABIN',
+      text: { value: 'CABIN', rows: 4, label: 'text' },
       size: nativeNumber({ current: 156, min: 42, max: 230, step: 1 }),
       tracking: nativeNumber({ current: 10, min: -24, max: 48, step: 0.5 }),
     },
@@ -367,7 +406,7 @@ export default function GlyphTextFill() {
         onChange: setInnerFontValue,
       },
       words: DEFAULT_WORDS,
-      size: { ...nativeNumber({ current: 27, min: 8, max: 70, step: 0.5 }), label: 'line size' },
+      size: { ...nativeNumber({ current: 19.5, min: 8, max: 70, step: 0.5 }), label: 'line size' },
       tracking: nativeNumber({ current: 0, min: -10, max: 40, step: 0.25 }),
     },
     { collapsed: false },
@@ -377,6 +416,7 @@ export default function GlyphTextFill() {
   const filling = useControls(
     'Filling',
     {
+      mask: false,
       leading: nativeNumber({ current: 0.96, min: 0.58, max: 1.35, step: 0.01 }),
       markers: nativeNumber({ current: 0.4, min: 0, max: 0.85, step: 0.01 }),
       seed: nativeNumber({ current: 2048, min: 1, max: 9999, step: 1 }),
@@ -390,7 +430,6 @@ export default function GlyphTextFill() {
       ink: '#070707',
       background: '#f2f1ee',
       outline: nativeNumber({ current: 0, min: 0, max: 3, step: 0.1 }),
-      margin: nativeNumber({ current: 70, min: 0, max: 180, step: 1 }),
       Markers: folder({
         markerAlpha: { ...nativeNumber({ current: 0.92, min: 0.2, max: 1, step: 0.01 }), label: 'marker alpha' },
         editorialMarkerColors: {
@@ -446,8 +485,8 @@ export default function GlyphTextFill() {
     const bounds = layoutBounds ?? { x1: 0, y1: -mainSize, x2: Math.max(cursor, 1), y2: 0 };
     const paddedWidth = Math.max(bounds.x2 - bounds.x1, 1);
     const paddedHeight = Math.max(bounds.y2 - bounds.y1, 1);
-    const maxWidth = Math.max(1, STAGE.width - Number(drawing.margin) * 2);
-    const maxHeight = Math.max(1, STAGE.height - Number(drawing.margin) * 2);
+    const maxWidth = Math.max(1, STAGE.width - STAGE_MARGIN * 2);
+    const maxHeight = Math.max(1, STAGE.height - STAGE_MARGIN * 2);
     const fitScale = Math.min(1, maxWidth / paddedWidth, maxHeight / paddedHeight);
     const finalScale = scale * fitScale;
     const offsetX = STAGE.width / 2 - (bounds.x1 + paddedWidth / 2) * fitScale;
@@ -470,7 +509,7 @@ export default function GlyphTextFill() {
 
           const seed = hashNumber(`${Number(filling.seed)}-${glyphIndex}-${Math.round(y)}-${spanIndex}`);
           const text = makeLineText(innerFont, words, span.width, lineSize, fillTracking, seed);
-          const linePath = buildTextPath(innerFont, text, lineSize, fillTracking);
+          const linePath = buildJustifiedTextPath(innerFont, text, lineSize, fillTracking, span.width);
           if (!linePath.d) return;
 
           const baseline = y + lineSize * 0.34;
@@ -480,13 +519,11 @@ export default function GlyphTextFill() {
             x: span.x,
             y: baseline,
             marker: createWordMarker(
-              innerFont,
-              text,
+              linePath.tokens,
               seed,
               span.x,
               baseline,
               lineSize,
-              fillTracking,
               Number(filling.markers),
               markerColors,
             ),
@@ -507,7 +544,6 @@ export default function GlyphTextFill() {
     outerTypography.text,
     mainSize,
     mainTracking,
-    drawing.margin,
     lineSize,
     lineStep,
     spanInset,
@@ -547,18 +583,20 @@ export default function GlyphTextFill() {
           aria-label={`${outerTypography.text} filled with rows of glyph text`}
           style={{ backgroundColor: String(drawing.background) }}
         >
-          <defs>
-            {filledGlyphs.map((glyph) => (
-              <clipPath key={`clip-${glyph.id}`} id={`glyph-text-fill-${glyph.id}`} clipPathUnits="userSpaceOnUse">
-                <path d={glyph.d} />
-              </clipPath>
-            ))}
-          </defs>
+          {filling.mask && (
+            <defs>
+              {filledGlyphs.map((glyph) => (
+                <clipPath key={`clip-${glyph.id}`} id={`glyph-text-fill-${glyph.id}`} clipPathUnits="userSpaceOnUse">
+                  <path d={glyph.d} />
+                </clipPath>
+              ))}
+            </defs>
+          )}
 
           <rect width={STAGE.width} height={STAGE.height} fill={String(drawing.background)} />
 
           {filledGlyphs.map((glyph) => (
-            <g key={glyph.id} clipPath={`url(#glyph-text-fill-${glyph.id})`}>
+            <g key={glyph.id} clipPath={filling.mask ? `url(#glyph-text-fill-${glyph.id})` : undefined}>
               {glyph.lines.map((line) => (
                 <g key={line.id}>
                   {line.marker && (

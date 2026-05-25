@@ -8,11 +8,11 @@ interface Props {
 const { sketches } = Astro.props;
 
 const meta = {
-  kicker: 'visual experiments / browser studies',
+  kicker: 'visual experiments / generative tools',
   title: 'generative sketches',
   summary:
-    'Small computational studies in typography, curves, particles, and procedural image-making.',
-  note: 'A live archive of sketches built to be opened, tuned, and reused.',
+    'Parametric studies in type, shape, motion, and procedural drawing for the browser.',
+  note: 'Tools for shaping procedural graphics directly in the browser, with SVG exports ready for graphics software.',
 };
 
 const figureSketches = [...sketches].reverse();
@@ -48,7 +48,7 @@ const figureSketches = [...sketches].reverse();
                 loading="lazy"
                 decoding="async"
               />
-              <span class="home-variant__cursor-square" aria-hidden="true" />
+              <span class="home-variant__cursor-circle" aria-hidden="true" />
             </figure>
           </a>
         </li>
@@ -252,14 +252,16 @@ const figureSketches = [...sketches].reverse();
     filter: saturate(0.88) contrast(1.05);
   }
 
-  .home-variant__cursor-square {
+  .home-variant__cursor-circle {
     position: absolute;
     left: var(--cursor-x);
     top: var(--cursor-y);
     z-index: 2;
-    width: clamp(1.5rem, 2.9vw, 2.55rem);
+    width: clamp(1.3rem, calc(1.55vw + 10px), 2.2rem);
     aspect-ratio: 1;
-    background: var(--variant-electric-blue);
+    border-radius: 50%;
+    background: #ffffff;
+    mix-blend-mode: difference;
     opacity: 0;
     pointer-events: none;
     transform: translate(-50%, -50%) scale(0.86);
@@ -268,14 +270,14 @@ const figureSketches = [...sketches].reverse();
       transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  .home-variant__thumb:hover .home-variant__cursor-square {
+  .home-variant__thumb:hover .home-variant__cursor-circle {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
 
   .home-variant__thumb:hover,
   .home-variant__item-link:focus-visible .home-variant__thumb {
-    border-color: var(--variant-electric-blue);
+    border-color: var(--variant-ink);
   }
 
   @media (max-width: 980px) {

@@ -1,0 +1,12 @@
+---
+import SketchLayout from '../../../layouts/SketchLayout.astro';
+import { getSketchById } from '../../../data/sketches';
+import GlyphFlowField from './_GlyphFlowField';
+
+const sketch = getSketchById('glyph-flow-field');
+if (!sketch) throw new Error('Missing sketch metadata');
+---
+
+<SketchLayout sketch={sketch}>
+  <GlyphFlowField client:only="react" />
+</SketchLayout>

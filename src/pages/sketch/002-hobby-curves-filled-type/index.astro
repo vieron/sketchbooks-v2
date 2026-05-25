@@ -1,0 +1,12 @@
+---
+import SketchLayout from '../../../layouts/SketchLayout.astro';
+import { getSketchById } from '../../../data/sketches';
+import HobbyCurvesFilledType from './_HobbyCurvesFilledType';
+
+const sketch = getSketchById('hobby-curves-filled-type');
+if (!sketch) throw new Error('Missing sketch metadata');
+---
+
+<SketchLayout sketch={sketch}>
+  <HobbyCurvesFilledType client:only="react" />
+</SketchLayout>

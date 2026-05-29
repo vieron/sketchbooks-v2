@@ -55,6 +55,15 @@ export const sketches: SketchMeta[] = [
     image: '/images/sketches/glyph-text-fill.svg',
     medium: 'svg / glyph fill',
   },
+  {
+    id: 'glyph-reaction-diffusion',
+    number: '006',
+    title: 'Glyph Reaction Diffusion',
+    description: 'Editable glyph vessels seeded with Gray-Scott reaction diffusion textures.',
+    href: '/sketch/006-glyph-reaction-diffusion',
+    image: '/images/sketches/glyph-reaction-diffusion.svg',
+    medium: 'canvas / glyphs / gray-scott',
+  },
 ];
 
 export const homeSketches = sketches.filter((sketch) => sketch.visible !== false);

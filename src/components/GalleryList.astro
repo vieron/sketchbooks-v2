@@ -14,12 +14,14 @@ const { sketches } = Astro.props;
       <li class="gallery-list__item">
         <a href={sketch.href} class="gallery-list__link">
           <figure class="gallery-list__figure">
-            <img
-              src={sketch.image}
-              alt={`${sketch.title} generated preview`}
-              loading="lazy"
-              decoding="async"
-            />
+            {sketch.image && (
+              <img
+                src={sketch.image}
+                alt={`${sketch.title} generated preview`}
+                loading="lazy"
+                decoding="async"
+              />
+            )}
           </figure>
           <span class="gallery-list__meta">
             <span>{sketch.number}</span>

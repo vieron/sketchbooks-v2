@@ -1,0 +1,12 @@
+---
+import SketchLayout from '../../../layouts/SketchLayout.astro';
+import { getSketchById } from '../../../data/sketches';
+import GlyphReactionDiffusion from './_GlyphReactionDiffusion';
+
+const sketch = getSketchById('glyph-reaction-diffusion');
+if (!sketch) throw new Error('Missing sketch metadata');
+---
+
+<SketchLayout sketch={sketch}>
+  <GlyphReactionDiffusion client:only="react" />
+</SketchLayout>

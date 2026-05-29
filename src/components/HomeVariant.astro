@@ -42,12 +42,14 @@ const figureSketches = [...sketches].reverse();
               {sketch.description}
             </span>
             <figure class="home-variant__thumb">
-              <img
-                src={sketch.image}
-                alt={`${sketch.title} generated preview`}
-                loading="lazy"
-                decoding="async"
-              />
+              {sketch.image && (
+                <img
+                  src={sketch.image}
+                  alt={`${sketch.title} generated preview`}
+                  loading="lazy"
+                  decoding="async"
+                />
+              )}
               <span class="home-variant__cursor-circle" aria-hidden="true" />
             </figure>
           </a>

@@ -8,6 +8,7 @@ import {
 } from "react";
 import { button, useControls } from "leva";
 import { SketchControls } from "../../../components/SketchControls";
+import { SketchProgress } from "../../../components/SketchProgress";
 import { nativeNumber } from "../../../controls/nativeNumberPlugin";
 import {
   getFontByValue,
@@ -108,12 +109,20 @@ type RateMapWorkerResponse = {
   pixels: ArrayBuffer;
 };
 
+type RenderProgress = {
+  label: string;
+  value: number | null;
+  max: number;
+  detail?: string;
+};
+
 const STAGE = { width: 1800, height: 1200 };
 const STAGE_MARGIN = 78;
 const MAIN_SIZE_SCALE = 4.72;
 const TRACKING_SCALE = 3;
 const DEFAULT_TEXT = "REACTION\nDIFFUSION";
 const RENDER_DEBOUNCE_MS = 180;
+const PROGRESS_COMPLETE_MS = 900;
 const FEED_RANGE = { min: 0.008, max: 0.115, step: 0.0001 } satisfies RateRange;
 const KILL_RANGE = { min: 0.055, max: 0.065, step: 0.0001 } satisfies RateRange;
 const STEPS_RANGE = { min: 120, max: 3200, step: 20 } satisfies RateRange;
@@ -145,8 +154,8 @@ const REACTION_PRESETS = {
   },
   munafoKappa: {
     label: "MROB kappa mazes",
-    feed: 0.05,
-    kill: 0.0609,
+    feed: 0.0449,
+    kill: 0.061,
   },
   munafoPi: {
     label: "MROB pi loops",
@@ -176,6 +185,31 @@ const defaultFontFamily = getFontFamilyById("geist");
 const defaultFont =
   geistFonts.find((font) => font.variant === "Black") ??
   defaultFontFamily.defaultFont;
+
+const DEFAULT_TYPOGRAPHY = {
+  text: DEFAULT_TEXT,
+  size: 123,
+  tracking: 19,
+  lineHeight: 1.06,
+};
+
+const DEFAULT_REACTION = {
+  behavior: "munafoKappa",
+  seedMode: "walls",
+  steps: 1880,
+  grain: 1950,
+  bleed: 16,
+  birth: 1,
+  seed: 6044,
+} satisfies {
+  behavior: ReactionPresetKey;
+  seedMode: SeedMode;
+  steps: number;
+  grain: number;
+  bleed: number;
+  birth: number;
+  seed: number;
+};
 
 function cleanFilePart(value: string) {
   return (
@@ -785,11 +819,18 @@ export default function GlyphReactionDiffusion() {
   const glyphMaskCacheRef = useRef<GlyphMaskCache | null>(null);
   const [fontFamilyId, setFontFamilyId] = useState(defaultFontFamily.id);
   const [fontValue, setFontValue] = useState(defaultFont.value);
-  const [presetKey, setPresetKey] = useState<ReactionPresetKey>("munafoKappa");
-  const [seedMode, setSeedMode] = useState<SeedMode>("both");
+  const [presetKey, setPresetKey] = useState<ReactionPresetKey>(
+    DEFAULT_REACTION.behavior,
+  );
+  const [seedMode, setSeedMode] = useState<SeedMode>(
+    DEFAULT_REACTION.seedMode,
+  );
   const [rerollOffset, setRerollOffset] = useState(0);
   const [output, setOutput] = useState<StaticReactionOutput | null>(null);
   const [isRendering, setIsRendering] = useState(false);
+  const [renderProgress, setRenderProgress] = useState<RenderProgress | null>(
+    null,
+  );
   const [isRateMapOpen, setIsRateMapOpen] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
   const fontFamily = getFontFamilyById(fontFamilyId);
@@ -818,11 +859,26 @@ export default function GlyphReactionDiffusion() {
         label: "variant",
         onChange: setFontValue,
       },
-      text: { value: DEFAULT_TEXT, rows: 3, label: "text" },
-      size: nativeNumber({ current: 123, min: 48, max: 250, step: 1 }),
-      tracking: nativeNumber({ current: 2, min: -30, max: 54, step: 0.5 }),
+      text: { value: DEFAULT_TYPOGRAPHY.text, rows: 3, label: "text" },
+      size: nativeNumber({
+        current: DEFAULT_TYPOGRAPHY.size,
+        min: 48,
+        max: 250,
+        step: 1,
+      }),
+      tracking: nativeNumber({
+        current: DEFAULT_TYPOGRAPHY.tracking,
+        min: -30,
+        max: 54,
+        step: 0.5,
+      }),
       lineHeight: {
-        ...nativeNumber({ current: 0.92, min: 0.5, max: 1.35, step: 0.01 }),
+        ...nativeNumber({
+          current: DEFAULT_TYPOGRAPHY.lineHeight,
+          min: 0.5,
+          max: 1.35,
+          step: 0.01,
+        }),
         label: "leading",
       },
     },
@@ -854,19 +910,19 @@ export default function GlyphReactionDiffusion() {
       }),
       "pick feed and kill rate": button(() => setIsRateMapOpen(true)),
       steps: nativeNumber({
-        current: 2520,
+        current: DEFAULT_REACTION.steps,
         min: STEPS_RANGE.min,
         max: STEPS_RANGE.max,
         step: STEPS_RANGE.step,
       }),
       grain: nativeNumber({
-        current: 1500,
+        current: DEFAULT_REACTION.grain,
         min: GRAIN_RANGE.min,
         max: GRAIN_RANGE.max,
         step: GRAIN_RANGE.step,
       }),
       bleed: nativeNumber({
-        current: 10,
+        current: DEFAULT_REACTION.bleed,
         min: BLEED_RANGE.min,
         max: BLEED_RANGE.max,
         step: BLEED_RANGE.step,
@@ -878,13 +934,13 @@ export default function GlyphReactionDiffusion() {
         onChange: (nextMode: string) => setSeedMode(nextMode as SeedMode),
       },
       birth: nativeNumber({
-        current: 1,
+        current: DEFAULT_REACTION.birth,
         min: BIRTH_RANGE.min,
         max: BIRTH_RANGE.max,
         step: BIRTH_RANGE.step,
       }),
       seed: nativeNumber({
-        current: 6044,
+        current: DEFAULT_REACTION.seed,
         min: SEED_RANGE.min,
         max: SEED_RANGE.max,
         step: SEED_RANGE.step,
@@ -987,6 +1043,7 @@ export default function GlyphReactionDiffusion() {
     if (!font || shapes.length === 0) {
       setOutput(null);
       setIsRendering(false);
+      setRenderProgress(null);
       return undefined;
     }
 
@@ -994,11 +1051,20 @@ export default function GlyphReactionDiffusion() {
     workerJobRef.current = jobId;
     const workers: Worker[] = [];
     let canceled = false;
+    let progressCompleteTimeoutId = 0;
 
     setIsRendering(true);
+    setRenderProgress({
+      label: "Preparing reaction",
+      value: null,
+      max: 1,
+      detail: "queueing",
+    });
     setRenderError(null);
 
-    const timeoutId = window.setTimeout(() => {
+    const startRender = () => {
+      if (canceled) return;
+
       const width = Math.max(64, Math.round(Number(reaction.grain)));
       const cellSize = STAGE.width / width;
       const seed = Math.round(Number(reaction.seed) + rerollOffset * 1009);
@@ -1021,6 +1087,12 @@ export default function GlyphReactionDiffusion() {
       let completed = 0;
       let failed = false;
       let nextGlyphIndex = 0;
+      setRenderProgress({
+        label: "Rendering reaction",
+        value: completed,
+        max: shapes.length,
+        detail: `${completed}/${shapes.length}`,
+      });
       const workerThreads = Math.max(
         1,
         Math.floor((navigator.hardwareConcurrency || 4) / 2),
@@ -1070,6 +1142,12 @@ export default function GlyphReactionDiffusion() {
 
             paths[event.data.glyphIndex] = event.data.inkPath;
             completed += 1;
+            setRenderProgress({
+              label: "Rendering reaction",
+              value: completed,
+              max: shapes.length,
+              detail: `${completed}/${shapes.length}`,
+            });
 
             if (completed !== shapes.length) {
               startNextWorker();
@@ -1081,6 +1159,15 @@ export default function GlyphReactionDiffusion() {
               shapes,
             });
             setIsRendering(false);
+            setRenderProgress({
+              label: "Rendering reaction",
+              value: shapes.length,
+              max: shapes.length,
+              detail: "done",
+            });
+            progressCompleteTimeoutId = window.setTimeout(() => {
+              if (workerJobRef.current === jobId) setRenderProgress(null);
+            }, PROGRESS_COMPLETE_MS);
           };
 
           worker.onerror = (event) => {
@@ -1093,6 +1180,7 @@ export default function GlyphReactionDiffusion() {
             console.error("Reaction diffusion worker failed", event.message);
             setRenderError(event.message || "Render failed");
             setIsRendering(false);
+            setRenderProgress(null);
             workers.forEach((activeWorker) => activeWorker.terminate());
             workers.length = 0;
           };
@@ -1132,11 +1220,22 @@ export default function GlyphReactionDiffusion() {
       };
 
       startNextWorker();
+    };
+
+    let firstFrameId = 0;
+    let secondFrameId = 0;
+    const timeoutId = window.setTimeout(() => {
+      firstFrameId = window.requestAnimationFrame(() => {
+        secondFrameId = window.requestAnimationFrame(startRender);
+      });
     }, RENDER_DEBOUNCE_MS);
 
     return () => {
       canceled = true;
       window.clearTimeout(timeoutId);
+      window.clearTimeout(progressCompleteTimeoutId);
+      window.cancelAnimationFrame(firstFrameId);
+      window.cancelAnimationFrame(secondFrameId);
       workers.forEach((worker) => worker.terminate());
     };
   }, [
@@ -1224,6 +1323,13 @@ export default function GlyphReactionDiffusion() {
               />
             ))}
         </svg>
+        <SketchProgress
+          active={renderProgress !== null}
+          label={renderProgress?.label}
+          value={renderProgress?.value}
+          max={renderProgress?.max}
+          detail={renderProgress?.detail}
+        />
       </div>
       {isRateMapOpen && (
         <FeedKillMapDialog

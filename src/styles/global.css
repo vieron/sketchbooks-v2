@@ -247,6 +247,57 @@ select {
   display: block;
 }
 
+.sketch-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 80;
+  height: 3px;
+  pointer-events: none;
+}
+
+.sketch-progress__meta {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.sketch-progress__track {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  transform: translateZ(0);
+}
+
+.sketch-progress__bar {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: var(--electric-blue);
+  transform-origin: left center;
+}
+
+.sketch-progress.is-indeterminate .sketch-progress__bar {
+  width: 42%;
+  animation: sketch-progress-slide 980ms ease-in-out infinite;
+}
+
+@keyframes sketch-progress-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+
+  100% {
+    transform: translateX(260%);
+  }
+}
+
 .sketch-controls {
   position: relative;
   z-index: 10;

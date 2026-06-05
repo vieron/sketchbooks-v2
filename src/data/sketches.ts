@@ -64,6 +64,15 @@ export const sketches: SketchMeta[] = [
     image: '/images/sketches/glyph-reaction-diffusion.svg',
     medium: 'canvas / glyphs / gray-scott',
   },
+  {
+    id: 'organic-glyph-fill',
+    number: '007',
+    title: 'Organic Glyph Fill',
+    description: 'OpenType outlines clipped into deterministic rounded Voronoi cells with uniform insets.',
+    href: '/sketch/007-organic-glyph-fill',
+    image: '/images/sketches/organic-glyph-fill.svg',
+    medium: 'svg / opentype / voronoi / clipper',
+  },
 ];
 
 export const homeSketches = sketches.filter((sketch) => sketch.visible !== false);

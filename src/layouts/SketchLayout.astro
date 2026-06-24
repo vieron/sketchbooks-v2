@@ -12,7 +12,7 @@ const { sketch } = Astro.props;
 <BaseLayout title={sketch.title} description={sketch.description}>
   <main class="sketch-page">
     <header class="sketch-page__header">
-      <a href="/" aria-label="Back to sketchbooks gallery">sketchbooks</a>
+      <a href="/" aria-label="Back to sketchbook gallery">sketchbook</a>
       <p>{sketch.number} / {sketch.medium}</p>
     </header>
     <slot />

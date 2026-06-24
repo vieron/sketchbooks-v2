@@ -349,7 +349,7 @@ export default function GlyphFlowField() {
   const field = useControls(
     'Field',
     {
-      particleCount: { ...nativeNumber({ current: 4250, min: 250, max: 5200, step: 50 }), label: 'particles' },
+      particleCount: { ...nativeNumber({ current: 900, min: 250, max: 5200, step: 50 }), label: 'particles' },
       noiseScale: { ...nativeNumber({ current: 0.0072, min: 0.0004, max: 0.0075, step: 0.0001 }), label: 'scale' },
       speed: nativeNumber({ current: 4, min: 0.3, max: 6, step: 0.1 }),
       turns: nativeNumber({ current: 0.55, min: 0.25, max: 3.5, step: 0.05 }),
